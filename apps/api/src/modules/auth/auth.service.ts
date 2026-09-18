@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ApiErrorCode } from '@pocket/shared';
 import type { User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { JwtPayload } from '../../common/types/auth';
@@ -40,7 +41,7 @@ export class AuthService {
         // The challenge is kept, so the client can resend it with a role
         // without asking the wallet to sign again.
         throw new BadRequestException({
-          code: 'ROLE_REQUIRED',
+          code: ApiErrorCode.RoleRequired,
           message: 'Choose startup or specialist to create your account',
         });
       }
