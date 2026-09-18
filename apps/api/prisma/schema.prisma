@@ -1,0 +1,41 @@
+// Pocket relational data model (off-chain state).
+// Enum values mirror @pocket/shared and are stored as-is: never rename one.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  startup
+  specialist
+  manager
+}
+
+enum VerificationStatus {
+  not_submitted
+  pending
+  approved
+  rejected
+}
+
+// A user IS their Stellar wallet: they sign in by signing a challenge with it
+// and the same address takes their role in every escrow they join.
+model User {
+  id                 String             @id @default(uuid()) @db.Uuid
+  stellarAddress     String             @unique @map("stellar_address")
+  role               UserRole
+  verificationStatus VerificationStatus @default(not_submitted) @map("verification_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  @@map("users")
+}
