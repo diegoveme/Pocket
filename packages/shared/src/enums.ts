@@ -23,3 +23,22 @@ export const VerificationStatus = {
 } as const;
 export type VerificationStatus =
   (typeof VerificationStatus)[keyof typeof VerificationStatus];
+
+/** Service areas a specialist can offer and a startup can hire for. */
+export const ServiceCategory = {
+  Growth: 'growth',
+  Sales: 'sales',
+  Marketing: 'marketing',
+  DigitalMarketing: 'digital_marketing',
+} as const;
+export type ServiceCategory = (typeof ServiceCategory)[keyof typeof ServiceCategory];
+
+/** Company stage shown on the standardized startup profile. */
+export const StartupStage = {
+  Idea: 'idea',
+  PreSeed: 'pre_seed',
+  Seed: 'seed',
+  SeriesA: 'series_a',
+  SeriesBPlus: 'series_b_plus',
+} as const;
+export type StartupStage = (typeof StartupStage)[keyof typeof StartupStage];
