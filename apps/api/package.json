@@ -12,7 +12,9 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^11",
@@ -32,8 +34,34 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^11",
+    "@nestjs/testing": "^11",
     "@types/express": "^5.0.6",
+    "@types/jest": "^30",
     "@types/node": "^24",
-    "prisma": "^6"
+    "jest": "^30",
+    "prisma": "^6",
+    "ts-jest": "^29"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*.spec.ts$",
+    "transform": {
+      "^.+.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": "<rootDir>/../tsconfig.spec.json"
+        }
+      ]
+    },
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node",
+    "transformIgnorePatterns": [
+      "node_modules/(?!.*(uint8array-extras|@noble|@exodus))"
+    ]
   }
 }
