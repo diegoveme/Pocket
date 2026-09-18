@@ -4,8 +4,10 @@ import { AuthService } from './auth.service';
 import { ChallengeDto } from './dto/challenge.dto';
 import { LoginDto } from './dto/login.dto';
 import { WalletChallengeService } from './wallet-challenge.service';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('auth')
+@Public()
 @Controller('auth')
 export class AuthController {
   constructor(
