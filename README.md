@@ -1,1 +1,78 @@
 # Pocket
+
+**The on-chain marketplace that connects startups with growth, sales and marketing specialists, with every payment protected by escrow on Stellar.**
+
+Startups post work and lock the budget in an escrow. Specialists deliver. Funds are released only when the deliverable is accepted, so the startup never pays for nothing and the specialist never works for free. Every user is reviewed by Pocket's team before they can operate, and every profile follows the same template so the marketplace stays easy to compare and looks premium.
+
+## How it works
+
+1. **Sign in with your Stellar wallet.** Freighter, xBull, Lobstr, Albedo and other wallets are supported through Stellar Wallets Kit. No passwords.
+2. **Get verified.** A Pocket manager reviews every startup and specialist before they can use the marketplace.
+3. **Fill in your profile.** Startups and specialists complete a fixed template, so every profile looks consistent.
+4. **Hire.** A startup picks a specialist and the agreed amount is locked in a USDC escrow on Stellar through [Trustless Work](https://www.trustlesswork.com/).
+5. **Deliver and get paid.** The specialist submits the deliverable, the startup approves it with their wallet and the escrow releases the funds. Disagreements are settled by a Pocket manager.
+
+Pocket never holds user funds: each party signs their own escrow operations with their own wallet.
+
+## Roles
+
+| Role           | What they do                                                                            |
+| -------------- | --------------------------------------------------------------------------------------- |
+| **Startup**    | Posts work, funds the escrow and approves deliverables.                                 |
+| **Specialist** | Offers growth, sales or marketing services, delivers the work and receives the payment. |
+| **Manager**    | Pocket's internal team. Verifies users and resolves disputes.                           |
+
+## Tech stack
+
+| Layer    | Technology                          |
+| -------- | ----------------------------------- |
+| Web      | Next.js + Stellar Wallets Kit       |
+| API      | NestJS + Prisma                     |
+| Database | PostgreSQL on Supabase              |
+| Escrow   | Trustless Work on Stellar (Soroban) |
+| Payments | USDC                                |
+| Tooling  | Bun workspaces + Turborepo          |
+
+## Repository structure
+
+```
+Pocket/
+├── apps/
+│   └── api/            NestJS REST API
+├── packages/
+│   └── shared/         Enums and API contracts shared by the API and the web client
+└── docs/               Engineering documentation
+```
+
+## Getting started
+
+Requirements: [Bun](https://bun.sh) 1.3+, Node.js 22+ and a Supabase project.
+
+```bash
+bun install
+
+# API environment: fill in the Supabase connection strings and a JWT secret
+cp apps/api/.env.example apps/api/.env
+
+# Database
+cd apps/api
+bunx prisma migrate deploy
+bun run db:seed          # creates the managers listed in MANAGER_STELLAR_ADDRESSES
+
+# Run the API on http://localhost:3000/api (Swagger UI at /api/docs)
+bun run dev
+```
+
+Run the tests with `bun run test` and the linter with `bun run lint`.
+
+## Status
+
+Early MVP, running on Stellar testnet.
+
+- [x] Wallet sign-in (SEP-10 style challenge) with startup and specialist roles
+- [ ] Manual verification reviewed by managers
+- [ ] Standardized startup and specialist profiles
+- [ ] Hiring flow
+- [ ] Escrow with Trustless Work: fund, deliver, approve, release
+- [ ] Disputes resolved by managers
+- [ ] Web client
