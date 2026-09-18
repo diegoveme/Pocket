@@ -15,8 +15,9 @@ function fakePrisma() {
         rows.set(create.stellarAddress, create);
         return create;
       }),
-      findUnique: jest.fn(async ({ where }: { where: { stellarAddress: string } }) =>
-        rows.get(where.stellarAddress) ?? null,
+      findUnique: jest.fn(
+        async ({ where }: { where: { stellarAddress: string } }) =>
+          rows.get(where.stellarAddress) ?? null,
       ),
       deleteMany: jest.fn(async ({ where }: { where: { stellarAddress: string } }) => {
         rows.delete(where.stellarAddress);
@@ -44,7 +45,9 @@ describe('WalletChallengeService', () => {
   }
 
   it('rejects an invalid stellar address', async () => {
-    await expect(service.issue('not-an-address')).rejects.toThrow('Invalid Stellar address');
+    await expect(service.issue('not-an-address')).rejects.toThrow(
+      'Invalid Stellar address',
+    );
   });
 
   it('issues a zero fee challenge for the address', async () => {

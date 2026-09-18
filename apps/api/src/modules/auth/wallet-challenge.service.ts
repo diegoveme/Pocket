@@ -30,10 +30,14 @@ export class WalletChallengeService {
     config: ConfigService,
   ) {
     this.networkPassphrase =
-      config.get<string>('stellar.network') === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+      config.get<string>('stellar.network') === 'mainnet'
+        ? Networks.PUBLIC
+        : Networks.TESTNET;
   }
 
-  async issue(stellarAddress: string): Promise<{ xdr: string; networkPassphrase: string }> {
+  async issue(
+    stellarAddress: string,
+  ): Promise<{ xdr: string; networkPassphrase: string }> {
     if (!isValidPublicKey(stellarAddress)) {
       throw new BadRequestException('Invalid Stellar address');
     }
@@ -65,7 +69,9 @@ export class WalletChallengeService {
    * Does not consume the challenge: call `consume` after a successful login.
    */
   async verify(stellarAddress: string, signedXdr: string): Promise<boolean> {
-    const challenge = await this.prisma.authChallenge.findUnique({ where: { stellarAddress } });
+    const challenge = await this.prisma.authChallenge.findUnique({
+      where: { stellarAddress },
+    });
     if (!challenge || challenge.expiresAt.getTime() < Date.now()) return false;
 
     let tx: Transaction | FeeBumpTransaction;
@@ -79,7 +85,8 @@ export class WalletChallengeService {
     if (tx.source !== stellarAddress || tx.operations.length !== 1) return false;
     const [op] = tx.operations;
     if (op.type !== 'manageData' || op.name !== CHALLENGE_DATA_NAME) return false;
-    if (!op.value || Buffer.from(op.value).toString('utf8') !== challenge.nonce) return false;
+    if (!op.value || Buffer.from(op.value).toString('utf8') !== challenge.nonce)
+      return false;
 
     const keypair = Keypair.fromPublicKey(stellarAddress);
     const hash = tx.hash();

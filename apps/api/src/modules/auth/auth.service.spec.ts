@@ -83,6 +83,10 @@ describe('AuthService', () => {
     expect(prisma.user.create).not.toHaveBeenCalled();
     expect(result.isNewUser).toBe(false);
     const claims = await jwt.verifyAsync(result.accessToken);
-    expect(claims).toMatchObject({ sub: user.id, role: 'startup', stellarAddress: ADDRESS });
+    expect(claims).toMatchObject({
+      sub: user.id,
+      role: 'startup',
+      stellarAddress: ADDRESS,
+    });
   });
 });

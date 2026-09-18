@@ -18,7 +18,9 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Pocket API')
-    .setDescription('Marketplace for startups and growth specialists with escrow payments on Stellar')
+    .setDescription(
+      'Marketplace for startups and growth specialists with escrow payments on Stellar',
+    )
     .setVersion('0.1.0')
     .addBearerAuth()
     .build();
