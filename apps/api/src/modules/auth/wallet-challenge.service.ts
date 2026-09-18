@@ -1,6 +1,14 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Account, Keypair, Networks, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
+import {
+  Account,
+  type FeeBumpTransaction,
+  Keypair,
+  Networks,
+  Operation,
+  type Transaction,
+  TransactionBuilder,
+} from '@stellar/stellar-sdk';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -49,6 +57,44 @@ export class WalletChallengeService {
     });
 
     return { xdr: tx.toXDR(), networkPassphrase: this.networkPassphrase };
+  }
+
+  /**
+   * True only when `signedXdr` is the challenge we issued to this address
+   * (same nonce, not expired) and carries a valid signature from its key.
+   * Does not consume the challenge: call `consume` after a successful login.
+   */
+  async verify(stellarAddress: string, signedXdr: string): Promise<boolean> {
+    const challenge = await this.prisma.authChallenge.findUnique({ where: { stellarAddress } });
+    if (!challenge || challenge.expiresAt.getTime() < Date.now()) return false;
+
+    let tx: Transaction | FeeBumpTransaction;
+    try {
+      tx = TransactionBuilder.fromXDR(signedXdr, this.networkPassphrase);
+    } catch {
+      return false;
+    }
+
+    if ('innerTransaction' in tx) return false;
+    if (tx.source !== stellarAddress || tx.operations.length !== 1) return false;
+    const [op] = tx.operations;
+    if (op.type !== 'manageData' || op.name !== CHALLENGE_DATA_NAME) return false;
+    if (!op.value || Buffer.from(op.value).toString('utf8') !== challenge.nonce) return false;
+
+    const keypair = Keypair.fromPublicKey(stellarAddress);
+    const hash = tx.hash();
+    return tx.signatures.some((sig) => {
+      try {
+        return keypair.verify(hash, sig.signature);
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  /** Invalidate the challenge so a captured signature cannot be replayed. */
+  async consume(stellarAddress: string): Promise<void> {
+    await this.prisma.authChallenge.deleteMany({ where: { stellarAddress } });
   }
 }
 
