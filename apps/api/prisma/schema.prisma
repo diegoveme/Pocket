@@ -39,3 +39,15 @@ model User {
 
   @@map("users")
 }
+
+// One outstanding SEP-10 style login challenge per address. The row is replaced
+// on every new challenge and deleted once a login succeeds.
+model AuthChallenge {
+  id             String   @id @default(uuid()) @db.Uuid
+  stellarAddress String   @unique @map("stellar_address")
+  nonce          String
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("auth_challenges")
+}
