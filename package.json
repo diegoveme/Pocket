@@ -1,0 +1,11 @@
+{
+  "name": "pocket",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pocket: on-chain marketplace connecting startups with growth, sales and marketing specialists, with escrow payments on Stellar",
+  "packageManager": "bun@1.4.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
