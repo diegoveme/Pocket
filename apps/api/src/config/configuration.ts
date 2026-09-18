@@ -8,7 +8,7 @@ export interface AppConfig {
   stellar: { network: StellarNetwork };
 }
 
-const REQUIRED = ['DATABASE_URL', 'JWT_SECRET'] as const;
+const REQUIRED = ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET'] as const;
 
 /** Fail fast at boot when a required variable is missing. */
 export function validateEnv(env: Record<string, unknown>): Record<string, unknown> {
