@@ -43,6 +43,7 @@ model User {
   verificationRequests  VerificationRequest[] @relation("VerificationRequests")
   verificationsReviewed VerificationRequest[] @relation("VerificationReviews")
   startupProfile        StartupProfile?
+  specialistProfile     SpecialistProfile?
 
   @@map("users")
 }
@@ -132,4 +133,31 @@ model StartupProfile {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("startup_profiles")
+}
+
+// Fixed template every specialist fills in. Rates are in USDC.
+model SpecialistProfile {
+  id               String            @id @default(uuid()) @db.Uuid
+  userId           String            @unique @map("user_id") @db.Uuid
+  displayName      String            @map("display_name")
+  // Short professional headline, e.g. "B2B SaaS outbound specialist".
+  headline         String
+  bio              String
+  categories       ServiceCategory[]
+  skills           String[]          @default([])
+  // Past work the startup can check.
+  caseStudies      String[]          @default([]) @map("case_studies")
+  hourlyRate       Decimal?          @map("hourly_rate") @db.Decimal(20, 7)
+  minProjectBudget Decimal?          @map("min_project_budget") @db.Decimal(20, 7)
+  portfolioUrl     String?           @map("portfolio_url")
+  linkedinUrl      String?           @map("linkedin_url")
+  avatarUrl        String?           @map("avatar_url")
+  location         String?
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([categories])
+  @@map("specialist_profiles")
 }
