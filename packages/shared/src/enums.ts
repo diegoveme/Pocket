@@ -42,3 +42,11 @@ export const StartupStage = {
   SeriesBPlus: 'series_b_plus',
 } as const;
 export type StartupStage = (typeof StartupStage)[keyof typeof StartupStage];
+
+/** Outcome of a manager's review. Mirrors VerificationStatus without the initial state. */
+export const VerificationDecision = {
+  Approved: 'approved',
+  Rejected: 'rejected',
+} as const;
+export type VerificationDecision =
+  (typeof VerificationDecision)[keyof typeof VerificationDecision];

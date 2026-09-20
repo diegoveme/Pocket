@@ -46,3 +46,38 @@ export const ApiErrorCode = {
   RoleRequired: 'ROLE_REQUIRED',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
+
+// ---------------------------------------------------------------------------
+// Verification: the manual KYC/KYB review every user goes through
+// ---------------------------------------------------------------------------
+
+/** What a user submits for review. Company fields only apply to startups. */
+export interface VerificationSubmission {
+  /** Legal name of the person submitting the request. */
+  fullName: string;
+  contactEmail: string;
+  /** ISO 3166-1 alpha-2 country code. */
+  country: string;
+  linkedinUrl?: string;
+  websiteUrl?: string;
+  /** Startups: registered company name. */
+  companyName?: string;
+  /** Startups: company registration or tax id, when they have one. */
+  companyRegistrationId?: string;
+  /** Anything else the user wants the manager to know. */
+  note?: string;
+}
+
+export interface VerificationRequest extends VerificationSubmission {
+  id: string;
+  userId: string;
+  status: Exclude<VerificationStatus, 'not_submitted'>;
+  reviewNote?: string | null;
+  reviewedAt?: IsoDate | null;
+  submittedAt: IsoDate;
+}
+
+/** Manager's decision on a request. A rejection must say why. */
+export interface VerificationReview {
+  note?: string;
+}
