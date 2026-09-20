@@ -70,8 +70,8 @@ Run the tests with `bun run test` and the linter with `bun run lint`.
 Early MVP, running on Stellar testnet.
 
 - [x] Wallet sign-in (SEP-10 style challenge) with startup and specialist roles
-- [ ] Manual verification reviewed by managers
-- [ ] Standardized startup and specialist profiles
+- [x] Manual verification reviewed by managers
+- [x] Standardized startup and specialist profiles, with a public specialist directory
 - [ ] Hiring flow
 - [ ] Escrow with Trustless Work: fund, deliver, approve, release
 - [ ] Disputes resolved by managers
