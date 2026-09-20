@@ -1,0 +1,40 @@
+import { Body, Controller, Get, Param, ParseUUIDPipe, Put } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import type { AuthUser } from '../../common/types/auth';
+import { SpecialistProfileDto } from './dto/specialist-profile.dto';
+import { StartupProfileDto } from './dto/startup-profile.dto';
+import { ProfilesService } from './profiles.service';
+
+@ApiTags('profiles')
+@Controller('profiles')
+export class ProfilesController {
+  constructor(private readonly profiles: ProfilesService) {}
+
+  /** The profile of the signed-in user. */
+  @ApiBearerAuth()
+  @Get('me')
+  mine(@CurrentUser() user: AuthUser) {
+    return this.profiles.mine(user);
+  }
+
+  @ApiBearerAuth()
+  @Put('me/startup')
+  saveStartup(@CurrentUser() user: AuthUser, @Body() dto: StartupProfileDto) {
+    return this.profiles.saveStartup(user, dto);
+  }
+
+  @ApiBearerAuth()
+  @Put('me/specialist')
+  saveSpecialist(@CurrentUser() user: AuthUser, @Body() dto: SpecialistProfileDto) {
+    return this.profiles.saveSpecialist(user, dto);
+  }
+
+  /** Public profile of an approved user. */
+  @Public()
+  @Get(':userId')
+  publicProfile(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.profiles.publicProfile(userId);
+  }
+}

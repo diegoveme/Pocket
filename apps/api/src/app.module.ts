@@ -7,6 +7,7 @@ import { VerifiedGuard } from './common/guards/verified.guard';
 import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { ManagerModule } from './modules/manager/manager.module';
+import { ProfilesModule } from './modules/profiles/profiles.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -24,6 +25,7 @@ import configuration, { validateEnv } from './config/configuration';
     UsersModule,
     VerificationModule,
     ManagerModule,
+    ProfilesModule,
   ],
   controllers: [HealthController],
   providers: [
