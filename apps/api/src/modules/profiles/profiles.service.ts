@@ -11,11 +11,11 @@ export class ProfilesService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Create or replace the startup profile of the signed-in user. */
-  saveStartup(user: AuthUser, dto: StartupProfileDto): Promise<StartupProfile> {
+  async saveStartup(user: AuthUser, dto: StartupProfileDto): Promise<StartupProfile> {
     if (user.role !== 'startup') {
       throw new ForbiddenException('Only startups have a startup profile');
     }
-    return this.prisma.startupProfile.upsert({
+    return await this.prisma.startupProfile.upsert({
       where: { userId: user.sub },
       create: { ...dto, userId: user.sub },
       update: dto,
@@ -23,11 +23,14 @@ export class ProfilesService {
   }
 
   /** Create or replace the specialist profile of the signed-in user. */
-  saveSpecialist(user: AuthUser, dto: SpecialistProfileDto): Promise<SpecialistProfile> {
+  async saveSpecialist(
+    user: AuthUser,
+    dto: SpecialistProfileDto,
+  ): Promise<SpecialistProfile> {
     if (user.role !== 'specialist') {
       throw new ForbiddenException('Only specialists have a specialist profile');
     }
-    return this.prisma.specialistProfile.upsert({
+    return await this.prisma.specialistProfile.upsert({
       where: { userId: user.sub },
       create: { ...dto, userId: user.sub },
       update: dto,
