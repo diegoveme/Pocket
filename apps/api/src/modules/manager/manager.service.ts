@@ -24,11 +24,11 @@ export class ManagerService {
   }
 
   /** Reject a pending request. The note explains what to fix before resubmitting. */
-  reject(requestId: string, managerId: string, note?: string) {
+  async reject(requestId: string, managerId: string, note?: string) {
     if (!note?.trim()) {
       throw new BadRequestException('A rejection must explain why');
     }
-    return this.decide(requestId, managerId, 'rejected', note);
+    return await this.decide(requestId, managerId, 'rejected', note);
   }
 
   private async decide(
