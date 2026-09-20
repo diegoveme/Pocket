@@ -1,4 +1,9 @@
-import type { UserRole, VerificationStatus } from './enums';
+import type {
+  ServiceCategory,
+  StartupStage,
+  UserRole,
+  VerificationStatus,
+} from './enums';
 
 /** ISO-8601 timestamp as serialized by the API. */
 export type IsoDate = string;
@@ -80,4 +85,58 @@ export interface VerificationRequest extends VerificationSubmission {
 /** Manager's decision on a request. A rejection must say why. */
 export interface VerificationReview {
   note?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Profiles: the fixed templates both sides fill in
+// ---------------------------------------------------------------------------
+
+export interface StartupProfile {
+  id: string;
+  userId: string;
+  companyName: string;
+  oneLiner: string;
+  sector: string;
+  stage: StartupStage;
+  lookingFor: string;
+  websiteUrl?: string | null;
+  logoUrl?: string | null;
+  location?: string | null;
+  updatedAt: IsoDate;
+}
+
+export interface SpecialistProfile {
+  id: string;
+  userId: string;
+  displayName: string;
+  headline: string;
+  bio: string;
+  categories: ServiceCategory[];
+  skills: string[];
+  caseStudies: string[];
+  /** Rates are in USDC. Serialized as strings to keep decimal precision. */
+  hourlyRate?: string | null;
+  minProjectBudget?: string | null;
+  portfolioUrl?: string | null;
+  linkedinUrl?: string | null;
+  avatarUrl?: string | null;
+  location?: string | null;
+  updatedAt: IsoDate;
+}
+
+/** GET /profiles/:userId */
+export interface PublicProfile {
+  userId: string;
+  role: UserRole;
+  stellarAddress: string;
+  memberSince: IsoDate;
+  profile: StartupProfile | SpecialistProfile;
+}
+
+/** GET /profiles/specialists */
+export interface SpecialistDirectory {
+  items: SpecialistProfile[];
+  total: number;
+  limit: number;
+  offset: number;
 }
