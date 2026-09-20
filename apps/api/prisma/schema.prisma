@@ -40,6 +40,9 @@ model User {
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
+  verificationRequests  VerificationRequest[] @relation("VerificationRequests")
+  verificationsReviewed VerificationRequest[] @relation("VerificationReviews")
+
   @@map("users")
 }
 
@@ -53,4 +56,38 @@ model AuthChallenge {
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@map("auth_challenges")
+}
+
+// ---------------------------------------------------------------------------
+// Verification (manual KYC/KYB reviewed by a manager)
+// ---------------------------------------------------------------------------
+
+// One request per submission. A user keeps their history: the newest row is the
+// one that decides their current verification status.
+model VerificationRequest {
+  id                    String             @id @default(uuid()) @db.Uuid
+  userId                String             @map("user_id") @db.Uuid
+  status                VerificationStatus @default(pending)
+  fullName              String             @map("full_name")
+  contactEmail          String             @map("contact_email")
+  // ISO 3166-1 alpha-2 country code.
+  country               String             @db.Char(2)
+  linkedinUrl           String?            @map("linkedin_url")
+  websiteUrl            String?            @map("website_url")
+  // Startups only.
+  companyName           String?            @map("company_name")
+  companyRegistrationId String?            @map("company_registration_id")
+  note                  String?
+  // Filled in by the manager who reviewed it.
+  reviewNote            String?            @map("review_note")
+  reviewedById          String?            @map("reviewed_by") @db.Uuid
+  reviewedAt            DateTime?          @map("reviewed_at")
+  submittedAt           DateTime           @default(now()) @map("submitted_at")
+
+  user       User  @relation("VerificationRequests", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("VerificationReviews", fields: [reviewedById], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@map("verification_requests")
 }
