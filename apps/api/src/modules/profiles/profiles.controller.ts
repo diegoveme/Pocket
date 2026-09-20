@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import type { AuthUser } from '../../common/types/auth';
+import { BrowseSpecialistsDto } from './dto/browse-specialists.dto';
 import { SpecialistProfileDto } from './dto/specialist-profile.dto';
 import { StartupProfileDto } from './dto/startup-profile.dto';
 import { ProfilesService } from './profiles.service';
@@ -29,6 +30,13 @@ export class ProfilesController {
   @Put('me/specialist')
   saveSpecialist(@CurrentUser() user: AuthUser, @Body() dto: SpecialistProfileDto) {
     return this.profiles.saveSpecialist(user, dto);
+  }
+
+  /** Directory of approved specialists, filtered by category or free text. */
+  @Public()
+  @Get('specialists')
+  browseSpecialists(@Query() query: BrowseSpecialistsDto) {
+    return this.profiles.browseSpecialists(query);
   }
 
   /** Public profile of an approved user. */

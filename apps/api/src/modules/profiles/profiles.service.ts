@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { SpecialistProfile, StartupProfile } from '@prisma/client';
+import { Prisma, type SpecialistProfile, type StartupProfile } from '@prisma/client';
 import type { AuthUser } from '../../common/types/auth';
 import { PrismaService } from '../../prisma/prisma.service';
+import { BrowseSpecialistsDto } from './dto/browse-specialists.dto';
 import { SpecialistProfileDto } from './dto/specialist-profile.dto';
 import { StartupProfileDto } from './dto/startup-profile.dto';
 
@@ -42,6 +43,42 @@ export class ProfilesService {
       return this.prisma.specialistProfile.findUnique({ where: { userId: user.sub } });
     }
     return null;
+  }
+
+  /**
+   * Public directory of specialists. Only approved accounts are listed, so the
+   * marketplace never shows anyone a manager has not reviewed.
+   */
+  async browseSpecialists(query: BrowseSpecialistsDto) {
+    const limit = query.limit ?? 20;
+    const offset = query.offset ?? 0;
+    const search = query.search?.trim();
+
+    const where: Prisma.SpecialistProfileWhereInput = {
+      user: { verificationStatus: 'approved' },
+      ...(query.category ? { categories: { has: query.category } } : {}),
+      ...(search
+        ? {
+            OR: [
+              { headline: { contains: search, mode: 'insensitive' } },
+              { bio: { contains: search, mode: 'insensitive' } },
+              { skills: { has: search } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.specialistProfile.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.specialistProfile.count({ where }),
+    ]);
+
+    return { items, total, limit, offset };
   }
 
   /** Public profile of an approved user. Unverified accounts stay hidden. */
