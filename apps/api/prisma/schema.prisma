@@ -42,6 +42,7 @@ model User {
 
   verificationRequests  VerificationRequest[] @relation("VerificationRequests")
   verificationsReviewed VerificationRequest[] @relation("VerificationReviews")
+  startupProfile        StartupProfile?
 
   @@map("users")
 }
@@ -90,4 +91,45 @@ model VerificationRequest {
   @@index([userId])
   @@index([status])
   @@map("verification_requests")
+}
+
+// ---------------------------------------------------------------------------
+// Standardized profiles
+// ---------------------------------------------------------------------------
+
+enum StartupStage {
+  idea
+  pre_seed
+  seed
+  series_a
+  series_b_plus
+}
+
+enum ServiceCategory {
+  growth
+  sales
+  marketing
+  digital_marketing
+}
+
+// Fixed template every startup fills in, so profiles stay comparable.
+model StartupProfile {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @unique @map("user_id") @db.Uuid
+  companyName String       @map("company_name")
+  // One sentence describing what the company does.
+  oneLiner    String       @map("one_liner")
+  sector      String
+  stage       StartupStage
+  // What they need help with right now.
+  lookingFor  String       @map("looking_for")
+  websiteUrl  String?      @map("website_url")
+  logoUrl     String?      @map("logo_url")
+  location    String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("startup_profiles")
 }
