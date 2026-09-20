@@ -5,6 +5,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
+import { VerificationModule } from './modules/verification/verification.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 import configuration, { validateEnv } from './config/configuration';
@@ -19,6 +20,7 @@ import configuration, { validateEnv } from './config/configuration';
     PrismaModule,
     AuthModule,
     UsersModule,
+    VerificationModule,
   ],
   controllers: [HealthController],
   providers: [
