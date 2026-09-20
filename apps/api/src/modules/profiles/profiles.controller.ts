@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Put, Query } from '@nestjs
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { Verified } from '../../common/decorators/verified.decorator';
 import type { AuthUser } from '../../common/types/auth';
 import { BrowseSpecialistsDto } from './dto/browse-specialists.dto';
 import { SpecialistProfileDto } from './dto/specialist-profile.dto';
@@ -21,12 +22,14 @@ export class ProfilesController {
   }
 
   @ApiBearerAuth()
+  @Verified()
   @Put('me/startup')
   saveStartup(@CurrentUser() user: AuthUser, @Body() dto: StartupProfileDto) {
     return this.profiles.saveStartup(user, dto);
   }
 
   @ApiBearerAuth()
+  @Verified()
   @Put('me/specialist')
   saveSpecialist(@CurrentUser() user: AuthUser, @Body() dto: SpecialistProfileDto) {
     return this.profiles.saveSpecialist(user, dto);
