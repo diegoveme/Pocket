@@ -1,0 +1,112 @@
+@import 'tailwindcss';
+
+:root {
+  --color-navy: #0f2e52;
+  --color-celeste: #86d4e6;
+  --color-celeste-light: #b8e7f1;
+  --color-yellow: #ffd23f;
+  --color-off-white: #f4fbfd;
+  --color-muted: rgba(244, 251, 253, 0.7);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-navy: #0f2e52;
+  --color-celeste: #86d4e6;
+  --color-celeste-light: #b8e7f1;
+  --color-yellow: #ffd23f;
+  --color-off-white: #f4fbfd;
+  --color-muted: rgba(244, 251, 253, 0.7);
+
+  --font-display: var(--font-fredoka);
+  --font-sans: var(--font-inter);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  height: 100%;
+  scroll-behavior: auto;
+}
+
+body {
+  min-height: 100%;
+  background-color: var(--color-navy);
+  color: var(--color-off-white);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.snap-container {
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.snap-container::-webkit-scrollbar {
+  display: none;
+}
+
+.snap-section {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-height: 100dvh;
+  height: 100dvh;
+  position: relative;
+  overflow: hidden;
+}
+
+.font-display {
+  font-family: var(--font-fredoka), system-ui, sans-serif;
+}
+
+.text-muted {
+  color: var(--color-muted);
+}
+
+.headline-xl {
+  font-family: var(--font-fredoka), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  font-size: clamp(2.5rem, 8vw, 6rem);
+}
+
+.headline-lg {
+  font-family: var(--font-fredoka), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-size: clamp(2rem, 5vw, 3.75rem);
+}
+
+.headline-md {
+  font-family: var(--font-fredoka), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-celeste);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
