@@ -1,6 +1,10 @@
 'use client';
 
-import type { Applicant } from '@pocket/shared';
+import {
+  TRUSTLESS_WORK_FEE_PERCENT,
+  totalAfterTrustlessWorkFee,
+  type Applicant,
+} from '@pocket/shared';
 import { useMutation } from '@tanstack/react-query';
 import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -209,6 +213,20 @@ export function HireDialog({ applicant }: { applicant: Applicant }) {
                 ? `${usdc(fromStroops(remaining))} still to assign.`
                 : `${usdc(fromStroops(-remaining))} over the agreed price.`}
           </p>
+
+          {remaining === BigInt(0) ? (
+            <p className="rounded-lg bg-celeste-light/40 px-3 py-2 text-sm text-muted-foreground">
+              You fund the full {usdc(applicant.price)}. Trustless Work, which runs the
+              escrow, keeps {TRUSTLESS_WORK_FEE_PERCENT}% of each payment, so{' '}
+              {applicant.specialist?.displayName ?? 'the specialist'} receives{' '}
+              {usdc(
+                totalAfterTrustlessWorkFee(
+                  milestones.map((milestone) => fromStroops(toStroops(milestone.amount))),
+                ),
+              )}{' '}
+              in total. Pocket charges nothing.
+            </p>
+          ) : null}
 
           <DialogFooter>
             <Button type="submit" disabled={hire.isPending || remaining !== BigInt(0)}>
