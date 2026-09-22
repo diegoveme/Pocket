@@ -60,6 +60,8 @@ export const ApiErrorCode = {
   StellarAccountNotFound: 'STELLAR_ACCOUNT_NOT_FOUND',
   /** The wallet has to trust USDC before it can receive or send it. */
   UsdcTrustlineRequired: 'USDC_TRUSTLINE_REQUIRED',
+  /** The wallet does not hold enough spendable USDC to fund the escrow. */
+  InsufficientUsdc: 'INSUFFICIENT_USDC',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
