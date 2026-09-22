@@ -59,8 +59,8 @@ describe('ContractsService', () => {
     };
     $transaction: jest.Mock;
   };
-  let escrow: { deploy: jest.Mock; isFunded: jest.Mock };
-  let stellar: { usdcReadiness: jest.Mock };
+  let escrow: { deploy: jest.Mock; isFunded: jest.Mock; prepareFund: jest.Mock };
+  let stellar: { usdcReadiness: jest.Mock; spendableUsdc: jest.Mock };
   let service: ContractsService;
 
   beforeEach(() => {
@@ -96,8 +96,15 @@ describe('ContractsService', () => {
       },
       $transaction: jest.fn(async (ops: unknown[]) => Promise.all(ops)),
     };
-    escrow = { deploy: jest.fn().mockResolvedValue('CESCROW'), isFunded: jest.fn() };
-    stellar = { usdcReadiness: jest.fn().mockResolvedValue('ready') };
+    escrow = {
+      deploy: jest.fn().mockResolvedValue('CESCROW'),
+      isFunded: jest.fn(),
+      prepareFund: jest.fn().mockResolvedValue({ operationId: 'op-1' }),
+    };
+    stellar = {
+      usdcReadiness: jest.fn().mockResolvedValue('ready'),
+      spendableUsdc: jest.fn(),
+    };
     const client = prisma as unknown as PrismaService;
     service = new ContractsService(
       client,
@@ -272,6 +279,44 @@ describe('ContractsService', () => {
       await expect(service.accept(startup, 'contract-1')).rejects.toBeInstanceOf(
         ForbiddenException,
       );
+    });
+  });
+
+  describe('prepareFund', () => {
+    const awaiting = {
+      id: 'contract-1',
+      startupId: 'startup-1',
+      status: 'awaiting_funding',
+      escrowId: 'CESCROW',
+      amount: new Prisma.Decimal('450.5'),
+    };
+
+    beforeEach(() => {
+      prisma.contract.findUnique.mockResolvedValue(awaiting);
+    });
+
+    it('prepares the funding when the wallet can pay it', async () => {
+      stellar.spendableUsdc.mockResolvedValue('450.5000000');
+      await service.prepareFund(startup, 'contract-1');
+      expect(escrow.prepareFund).toHaveBeenCalledWith(awaiting, 'startup-1', 'GSTARTUP');
+    });
+
+    it('says how much USDC is missing instead of preparing a transaction that fails', async () => {
+      stellar.spendableUsdc.mockResolvedValue('400.0000000');
+      await expect(service.prepareFund(startup, 'contract-1')).rejects.toMatchObject({
+        response: {
+          code: 'INSUFFICIENT_USDC',
+          message: expect.stringContaining('Add 50.5 USDC'),
+        },
+      });
+      expect(escrow.prepareFund).not.toHaveBeenCalled();
+    });
+
+    it('treats a wallet without USDC as holding none', async () => {
+      stellar.spendableUsdc.mockResolvedValue(null);
+      await expect(service.prepareFund(startup, 'contract-1')).rejects.toMatchObject({
+        response: { code: 'INSUFFICIENT_USDC' },
+      });
     });
   });
 
