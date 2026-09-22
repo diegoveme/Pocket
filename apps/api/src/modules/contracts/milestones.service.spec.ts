@@ -54,8 +54,10 @@ describe('MilestonesService', () => {
     $transaction: jest.Mock;
   };
   let escrow: {
+    prepareApprove: jest.Mock;
     submitApprove: jest.Mock;
     milestoneHas: jest.Mock;
+    milestoneFlags: jest.Mock;
     release: jest.Mock;
   };
   let service: MilestonesService;
@@ -83,8 +85,11 @@ describe('MilestonesService', () => {
       $transaction: jest.fn(async (ops: unknown[]) => Promise.all(ops)),
     };
     escrow = {
+      prepareApprove: jest.fn().mockResolvedValue({ operationId: 'op-1' }),
       submitApprove: jest.fn(),
       milestoneHas: jest.fn(),
+      // Nothing set on chain yet: the milestone can be approved.
+      milestoneFlags: jest.fn().mockResolvedValue({}),
       release: jest.fn(),
     };
     service = new MilestonesService(
@@ -144,7 +149,53 @@ describe('MilestonesService', () => {
     });
   });
 
+  describe('prepareApprove', () => {
+    it('prepares the approval when nothing is set on chain', async () => {
+      prisma.milestone.findUnique.mockResolvedValue(milestone('delivered'));
+      await service.prepareApprove(startup, 'milestone-1');
+      expect(escrow.prepareApprove).toHaveBeenCalled();
+    });
+
+    it.each([{ disputed: true }, { disputed: true, resolved: true }])(
+      'refuses a milestone in dispute on chain (%o), which could never be released',
+      async (flags) => {
+        prisma.milestone.findUnique.mockResolvedValue(milestone('delivered'));
+        escrow.milestoneFlags.mockResolvedValue(flags);
+        await expect(
+          service.prepareApprove(startup, 'milestone-1'),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expect(escrow.prepareApprove).not.toHaveBeenCalled();
+        expect(prisma.milestone.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([{ approved: true }, { approved: true, released: true }])(
+      'syncs a milestone already approved on chain (%o) instead of approving it again',
+      async (flags) => {
+        prisma.milestone.findUnique.mockResolvedValue(milestone('delivered'));
+        escrow.milestoneFlags.mockResolvedValue(flags);
+        await expect(
+          service.prepareApprove(startup, 'milestone-1'),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expect(escrow.prepareApprove).not.toHaveBeenCalled();
+        expect(prisma.milestone.update).toHaveBeenCalledWith({
+          where: { id: 'milestone-1' },
+          data: expect.objectContaining({ status: 'approved' }),
+        });
+      },
+    );
+  });
+
   describe('submitApprove', () => {
+    it('does not send an approval if the milestone was disputed since it was prepared', async () => {
+      prisma.milestone.findUnique.mockResolvedValue(milestone('delivered'));
+      escrow.milestoneFlags.mockResolvedValue({ disputed: true });
+      await expect(
+        service.submitApprove(startup, 'milestone-1', 'signed'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(escrow.submitApprove).not.toHaveBeenCalled();
+    });
+
     it('confirms the approval on chain, pays the milestone and completes the contract', async () => {
       prisma.milestone.findUnique
         .mockResolvedValueOnce(milestone('delivered'))
