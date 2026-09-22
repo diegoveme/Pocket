@@ -174,11 +174,7 @@ export class TrustlessWorkClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: { 'content-type': 'application/json', 'x-api-key': this.apiKey },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    const response = await this.fetchWithRetry(method, path, body);
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) {
       this.logger.error(
@@ -190,4 +186,54 @@ export class TrustlessWorkClient {
     }
     return payload as T;
   }
+
+  /**
+   * Trustless Work allows 50 requests per minute per API key and answers 429
+   * past that. A rejected request was not processed, so it is safe to send it
+   * again, sending included: wait what the server asks (Retry-After) or back
+   * off, and give up after a few tries with a clear message.
+   */
+  private async fetchWithRetry(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: unknown,
+  ): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'x-api-key': this.apiKey },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      if (response.status !== 429) return response;
+      if (attempt >= RATE_LIMIT_RETRIES) {
+        this.logger.error(`${method} ${path} -> 429 after ${attempt + 1} tries`);
+        throw new ServiceUnavailableException(
+          'Trustless Work is busy right now. Try again in a minute',
+        );
+      }
+      const waitMs = retryDelayMs(response.headers.get('retry-after'), attempt);
+      this.logger.warn(`${method} ${path} -> 429, retrying in ${waitMs} ms`);
+      await this.sleep(waitMs);
+    }
+  }
+
+  /** Separate so tests do not have to wait. */
+  protected sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}
+
+/** Retries after a 429 before giving up. */
+const RATE_LIMIT_RETRIES = 3;
+/** Never wait longer than this for one retry, whatever the server says. */
+const MAX_RETRY_DELAY_MS = 20_000;
+
+/** Wait what Retry-After asks (seconds), or 1, 2 and 4 seconds when it is absent. */
+export function retryDelayMs(retryAfter: string | null, attempt: number): number {
+  const seconds = Number(retryAfter);
+  const delay =
+    retryAfter !== null && Number.isFinite(seconds) && seconds >= 0
+      ? seconds * 1000
+      : 1000 * 2 ** attempt;
+  return Math.min(delay, MAX_RETRY_DELAY_MS);
 }
