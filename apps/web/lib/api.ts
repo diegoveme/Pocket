@@ -51,17 +51,32 @@ export async function api<T>(
   options: { method?: Method; body?: unknown } = {},
 ): Promise<T> {
   const token = getToken();
-  const response = await fetch(`${API_URL}${path}`, {
-    method: options.method ?? 'GET',
-    headers: {
-      'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: options.method ?? 'GET',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+  } catch {
+    // The browser only says "Failed to fetch": the API is down, the URL is
+    // wrong, or CORS does not allow this origin.
+    throw new ApiError(
+      0,
+      `Cannot reach the Pocket API at ${API_URL}. Check that it is running and allows this site.`,
+    );
+  }
 
   const text = await response.text();
-  const payload: unknown = text ? JSON.parse(text) : null;
+  let payload: unknown = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    // Not JSON: probably NEXT_PUBLIC_API_URL points somewhere that is not the API.
+  }
   if (!response.ok) {
     const body = (payload ?? {}) as { message?: string | string[]; code?: string };
     const message = Array.isArray(body.message) ? body.message.join('. ') : body.message;
@@ -73,5 +88,16 @@ export async function api<T>(
 /** A readable message for any error, for toasts and inline alerts. */
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
+  // Wallets reject with plain objects such as { code, message }, not Errors.
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    error.message
+  ) {
+    return error.message;
+  }
+  if (typeof error === 'string' && error) return error;
   return 'Something went wrong';
 }

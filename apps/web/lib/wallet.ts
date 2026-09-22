@@ -46,12 +46,16 @@ export async function prepareSignSubmit<T>(
   return api<T>(submitPath, { method: 'POST', body: { signedXdr, ...extra } });
 }
 
-/** True when the user closed the wallet modal instead of failing. */
+/**
+ * True when the user closed the wallet picker instead of failing. Only that
+ * exact rejection: the kit also uses code -1 for any wallet error without a
+ * code of its own, and those must be shown.
+ */
 export function isWalletDismissed(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
-    'code' in error &&
-    (error as { code: unknown }).code === -1
+    'message' in error &&
+    (error as { message: unknown }).message === 'The user closed the modal.'
   );
 }
