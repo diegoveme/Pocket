@@ -1,6 +1,12 @@
 'use client';
 
-import type { ChainOperationKind, ContractDetail, User } from '@pocket/shared';
+import {
+  TRUSTLESS_WORK_FEE_PERCENT,
+  totalAfterTrustlessWorkFee,
+  type ChainOperationKind,
+  type ContractDetail,
+  type User,
+} from '@pocket/shared';
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLinkIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -200,6 +206,9 @@ function NextStep({ contract, user }: { contract: ContractDetail; user: User }) 
   );
   // The chain can take a few seconds to show a deposit; offer to check again.
   const fundingPending = fund.error instanceof ApiError && fund.error.status === 409;
+  const specialistReceives = usdc(
+    totalAfterTrustlessWorkFee(contract.milestones.map((milestone) => milestone.amount)),
+  );
 
   if (contract.status === 'awaiting_specialist') {
     if (!isSpecialist) {
@@ -216,7 +225,9 @@ function NextStep({ contract, user }: { contract: ContractDetail; user: User }) 
           <CardTitle>Review the terms</CardTitle>
           <CardDescription>
             If you accept, Pocket deploys an escrow on Stellar with these milestones,
-            paying your wallet. Then the startup funds it.
+            paying your wallet. Then the startup funds it. Trustless Work, which runs the
+            escrow, keeps {TRUSTLESS_WORK_FEE_PERCENT}% of each payment, so you receive{' '}
+            {specialistReceives} of the {usdc(contract.amount)}.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
@@ -257,7 +268,9 @@ function NextStep({ contract, user }: { contract: ContractDetail; user: User }) 
           <CardTitle>Fund the escrow</CardTitle>
           <CardDescription>
             Sign one transaction to lock {usdc(contract.amount)} in the escrow. Nobody can
-            move it alone: each milestone is released when you approve it.
+            move it alone: each milestone is released when you approve it. Trustless Work
+            keeps {TRUSTLESS_WORK_FEE_PERCENT}% of each payment, so the specialist
+            receives {specialistReceives}. Pocket charges nothing.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
