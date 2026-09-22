@@ -1,6 +1,11 @@
 import type {
   ApplicationStatus,
+  ChainOperationKind,
+  ContractStatus,
+  DisputeOutcome,
+  DisputeStatus,
   JobStatus,
+  MilestoneStatus,
   ServiceCategory,
   StartupStage,
   UserRole,
@@ -221,4 +226,158 @@ export interface Applicant extends Application {
 /** GET /applications/mine: the specialist's applications with their job. */
 export interface MyApplication extends Application {
   job: Pick<Job, 'id' | 'title' | 'category' | 'budget' | 'deadline' | 'status'>;
+}
+
+// ---------------------------------------------------------------------------
+// Contracts, milestones and disputes
+// ---------------------------------------------------------------------------
+
+/** A transaction the API prepared for the user's wallet to sign. */
+export interface PreparedTransaction {
+  operationId: string;
+  /** Unsigned transaction envelope, base64 XDR. */
+  xdr: string;
+  networkPassphrase: string;
+}
+
+/** POST /contracts: hire an applicant. Amounts are in USDC and add up to their price. */
+export interface ContractInput {
+  applicationId: string;
+  milestones: {
+    title: string;
+    description: string;
+    amount: number;
+    /** Calendar date, YYYY-MM-DD. */
+    dueDate: string;
+  }[];
+}
+
+export interface Contract {
+  id: string;
+  jobId: string;
+  applicationId: string;
+  startupId: string;
+  specialistId: string;
+  /** USDC, serialized as a string. */
+  amount: string;
+  status: ContractStatus;
+  /** Soroban contract id of the escrow, once deployed. */
+  escrowId: string | null;
+  acceptedAt: IsoDate | null;
+  fundedAt: IsoDate | null;
+  completedAt: IsoDate | null;
+  cancelledAt: IsoDate | null;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface Milestone {
+  id: string;
+  contractId: string;
+  /** Zero-based index inside the escrow. */
+  position: number;
+  title: string;
+  description: string;
+  amount: string;
+  dueDate: IsoDate;
+  status: MilestoneStatus;
+  approvedAt: IsoDate | null;
+  paidAt: IsoDate | null;
+}
+
+export interface Deliverable {
+  id: string;
+  milestoneId: string;
+  version: number;
+  url: string;
+  note: string | null;
+  /** What the startup asked to change on this version. */
+  feedback: string | null;
+  createdAt: IsoDate;
+}
+
+export interface Dispute {
+  id: string;
+  milestoneId: string;
+  openedById: string;
+  reason: string;
+  status: DisputeStatus;
+  outcome: DisputeOutcome | null;
+  specialistAmount: string | null;
+  startupAmount: string | null;
+  resolutionNote: string | null;
+  resolvedById: string | null;
+  resolvedAt: IsoDate | null;
+  createdAt: IsoDate;
+}
+
+export interface DisputeEvidence {
+  id: string;
+  disputeId: string;
+  authorId: string;
+  url: string | null;
+  comment: string;
+  createdAt: IsoDate;
+}
+
+/** A confirmed on-chain step, with its hash for the explorer. */
+export interface ChainOperation {
+  id: string;
+  kind: ChainOperationKind;
+  txHash: string;
+  amount: string | null;
+  milestoneId: string | null;
+  confirmedAt: IsoDate | null;
+}
+
+/** GET /contracts/mine */
+export interface ContractSummary extends Contract {
+  job: Pick<Job, 'id' | 'title' | 'category'>;
+  milestones: Pick<Milestone, 'id' | 'position' | 'title' | 'amount' | 'status'>[];
+}
+
+/** GET /contracts/:id */
+export interface ContractDetail extends Contract {
+  job: Pick<Job, 'id' | 'title' | 'category' | 'deadline' | 'status'>;
+  startup: {
+    id: string;
+    stellarAddress: string;
+    startupProfile: { companyName: string; logoUrl: string | null } | null;
+  };
+  specialist: {
+    id: string;
+    stellarAddress: string;
+    specialistProfile: { displayName: string; avatarUrl: string | null } | null;
+  };
+  milestones: (Milestone & { deliverables: Deliverable[]; disputes: Dispute[] })[];
+  chainOperations: ChainOperation[];
+  /** Each party's contact email, visible once there is a contract. */
+  contacts: { startup: string | null; specialist: string | null };
+}
+
+/** GET /manager/disputes */
+export interface DisputeListItem extends Dispute {
+  milestone: {
+    id: string;
+    title: string;
+    amount: string;
+    contract: { id: string; job: { title: string } };
+  };
+}
+
+/** GET /disputes/:id */
+export interface DisputeDetail extends Dispute {
+  milestone: Milestone & {
+    contract: { id: string; startupId: string; specialistId: string };
+    deliverables: Deliverable[];
+  };
+  evidence: (DisputeEvidence & { author: { id: string; role: UserRole } })[];
+}
+
+/** POST /manager/disputes/:id/resolve */
+export interface DisputeResolution {
+  outcome: DisputeOutcome;
+  /** Split only: USDC the specialist receives. The startup gets the rest. */
+  specialistAmount?: number;
+  note: string;
 }

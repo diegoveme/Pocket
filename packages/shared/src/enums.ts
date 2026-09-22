@@ -72,3 +72,51 @@ export const ApplicationStatus = {
 } as const;
 export type ApplicationStatus =
   (typeof ApplicationStatus)[keyof typeof ApplicationStatus];
+
+/** A contract from the startup's offer to the last payment. */
+export const ContractStatus = {
+  AwaitingSpecialist: 'awaiting_specialist',
+  AwaitingFunding: 'awaiting_funding',
+  Active: 'active',
+  Completed: 'completed',
+  Cancelled: 'cancelled',
+} as const;
+export type ContractStatus = (typeof ContractStatus)[keyof typeof ContractStatus];
+
+export const MilestoneStatus = {
+  Pending: 'pending',
+  Delivered: 'delivered',
+  ChangesRequested: 'changes_requested',
+  Approved: 'approved',
+  Paid: 'paid',
+  Disputed: 'disputed',
+  Resolved: 'resolved',
+} as const;
+export type MilestoneStatus = (typeof MilestoneStatus)[keyof typeof MilestoneStatus];
+
+export const DisputeStatus = {
+  Open: 'open',
+  Resolved: 'resolved',
+} as const;
+export type DisputeStatus = (typeof DisputeStatus)[keyof typeof DisputeStatus];
+
+/** What a manager decides on a disputed milestone. */
+export const DisputeOutcome = {
+  PaySpecialist: 'pay_specialist',
+  RefundStartup: 'refund_startup',
+  Split: 'split',
+} as const;
+export type DisputeOutcome = (typeof DisputeOutcome)[keyof typeof DisputeOutcome];
+
+/** Every on-chain step Pocket records. */
+export const ChainOperationKind = {
+  Trustline: 'trustline',
+  Deploy: 'deploy',
+  Fund: 'fund',
+  Approve: 'approve',
+  Release: 'release',
+  Dispute: 'dispute',
+  Resolve: 'resolve',
+} as const;
+export type ChainOperationKind =
+  (typeof ChainOperationKind)[keyof typeof ChainOperationKind];
