@@ -86,6 +86,7 @@ export class MilestonesService {
     if (milestone.status !== 'delivered') {
       throw new BadRequestException('Only a delivered milestone can be approved');
     }
+    await this.requireApprovableOnChain(milestone);
     return this.escrow.prepareApprove(
       milestone.contract,
       milestone,
@@ -103,6 +104,8 @@ export class MilestonesService {
     if (milestone.status !== 'delivered') {
       throw new BadRequestException('Only a delivered milestone can be approved');
     }
+    // Checked again: the other party may have disputed it since it was prepared.
+    await this.requireApprovableOnChain(milestone);
     await this.escrow.submitApprove(
       milestone.contractId,
       milestoneId,
@@ -195,6 +198,37 @@ export class MilestonesService {
       where: { id: contract.jobId },
       data: { status: 'completed' },
     });
+  }
+
+  /**
+   * The V1 contract lets the approver approve a disputed milestone, but that
+   * milestone can then only be settled by resolving the dispute, never
+   * released. So the chain, not the database, decides whether an approval
+   * makes sense. A milestone already approved or paid on chain (an approval
+   * that landed after the request gave up waiting) is synced so its payment
+   * can be released instead of being approved again.
+   */
+  private async requireApprovableOnChain(
+    milestone: MilestoneWithContract,
+  ): Promise<void> {
+    const flags = await this.escrow.milestoneFlags(
+      milestone.contract,
+      milestone.position,
+    );
+    if (flags.disputed || flags.resolved) {
+      throw new ConflictException(
+        'This milestone is in dispute on the escrow, so it cannot be approved. A manager settles it',
+      );
+    }
+    if (flags.approved || flags.released) {
+      await this.prisma.milestone.update({
+        where: { id: milestone.id },
+        data: { status: 'approved', approvedAt: new Date() },
+      });
+      throw new ConflictException(
+        'This milestone is already approved on the escrow. Release its payment instead',
+      );
+    }
   }
 
   async load(milestoneId: string): Promise<MilestoneWithContract> {
