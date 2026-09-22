@@ -44,6 +44,8 @@ model User {
   verificationsReviewed VerificationRequest[] @relation("VerificationReviews")
   startupProfile        StartupProfile?
   specialistProfile     SpecialistProfile?
+  jobs                  Job[]
+  applications          Application[]
 
   @@map("users")
 }
@@ -160,4 +162,67 @@ model SpecialistProfile {
 
   @@index([categories])
   @@map("specialist_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// Jobs and applications
+// ---------------------------------------------------------------------------
+
+enum JobStatus {
+  open
+  in_progress
+  completed
+  closed
+}
+
+enum ApplicationStatus {
+  submitted
+  accepted
+  rejected
+  withdrawn
+}
+
+// A piece of work a startup posts for specialists to apply to. Budget is in USDC.
+model Job {
+  id           String          @id @default(uuid()) @db.Uuid
+  startupId    String          @map("startup_id") @db.Uuid
+  title        String
+  description  String
+  category     ServiceCategory
+  // What the startup expects to receive at the end.
+  deliverables String
+  budget       Decimal         @db.Decimal(20, 7)
+  deadline     DateTime        @db.Date
+  status       JobStatus       @default(open)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  startup      User          @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  @@index([status, category])
+  @@index([startupId])
+  @@map("jobs")
+}
+
+// A specialist's offer on a job. One per specialist and job; the price may
+// differ from the posted budget.
+model Application {
+  id            String            @id @default(uuid()) @db.Uuid
+  jobId         String            @map("job_id") @db.Uuid
+  specialistId  String            @map("specialist_id") @db.Uuid
+  proposal      String
+  price         Decimal           @db.Decimal(20, 7)
+  estimatedDays Int               @map("estimated_days")
+  status        ApplicationStatus @default(submitted)
+  decidedAt     DateTime?         @map("decided_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  job        Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  specialist User @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, specialistId])
+  @@index([specialistId])
+  @@map("applications")
 }
