@@ -46,6 +46,12 @@ model User {
   specialistProfile     SpecialistProfile?
   jobs                  Job[]
   applications          Application[]
+  contractsAsStartup    Contract[]            @relation("ContractStartup")
+  contractsAsSpecialist Contract[]            @relation("ContractSpecialist")
+  disputesOpened        Dispute[]             @relation("DisputeOpenedBy")
+  disputesResolved      Dispute[]             @relation("DisputeResolvedBy")
+  disputeEvidence       DisputeEvidence[]
+  chainOperations       ChainOperation[]
 
   @@map("users")
 }
@@ -199,6 +205,7 @@ model Job {
 
   startup      User          @relation(fields: [startupId], references: [id], onDelete: Cascade)
   applications Application[]
+  contracts    Contract[]
 
   @@index([status, category])
   @@index([startupId])
@@ -219,10 +226,212 @@ model Application {
   createdAt     DateTime          @default(now()) @map("created_at")
   updatedAt     DateTime          @updatedAt @map("updated_at")
 
-  job        Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  specialist User @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+  job        Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  specialist User      @relation(fields: [specialistId], references: [id], onDelete: Cascade)
+  contract   Contract?
 
   @@unique([jobId, specialistId])
   @@index([specialistId])
   @@map("applications")
+}
+
+// ---------------------------------------------------------------------------
+// Contracts, milestones and deliverables
+// ---------------------------------------------------------------------------
+
+enum ContractStatus {
+  awaiting_specialist
+  awaiting_funding
+  active
+  completed
+  cancelled
+}
+
+enum MilestoneStatus {
+  pending
+  delivered
+  changes_requested
+  approved
+  paid
+  disputed
+  resolved
+}
+
+// The agreement between a startup and the specialist it chose. Each contract
+// gets its own multi-release escrow on Stellar, one release per milestone.
+model Contract {
+  id            String         @id @default(uuid()) @db.Uuid
+  jobId         String         @map("job_id") @db.Uuid
+  applicationId String         @unique @map("application_id") @db.Uuid
+  startupId     String         @map("startup_id") @db.Uuid
+  specialistId  String         @map("specialist_id") @db.Uuid
+  // USDC. Always equals the sum of the milestones.
+  amount        Decimal        @db.Decimal(20, 7)
+  status        ContractStatus @default(awaiting_specialist)
+  // Soroban contract id (C...) of the Trustless Work escrow, once deployed.
+  escrowId      String?        @unique @map("escrow_id")
+  acceptedAt    DateTime?      @map("accepted_at")
+  fundedAt      DateTime?      @map("funded_at")
+  completedAt   DateTime?      @map("completed_at")
+  cancelledAt   DateTime?      @map("cancelled_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  job             Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  application     Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  startup         User             @relation("ContractStartup", fields: [startupId], references: [id], onDelete: Cascade)
+  specialist      User             @relation("ContractSpecialist", fields: [specialistId], references: [id], onDelete: Cascade)
+  milestones      Milestone[]
+  chainOperations ChainOperation[]
+
+  @@index([jobId])
+  @@index([startupId])
+  @@index([specialistId])
+  @@map("contracts")
+}
+
+model Milestone {
+  id          String          @id @default(uuid()) @db.Uuid
+  contractId  String          @map("contract_id") @db.Uuid
+  // Zero-based index of this milestone inside the escrow.
+  position    Int
+  title       String
+  description String
+  // USDC.
+  amount      Decimal         @db.Decimal(20, 7)
+  dueDate     DateTime        @map("due_date") @db.Date
+  status      MilestoneStatus @default(pending)
+  approvedAt  DateTime?       @map("approved_at")
+  paidAt      DateTime?       @map("paid_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  contract        Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  deliverables    Deliverable[]
+  disputes        Dispute[]
+  chainOperations ChainOperation[]
+
+  @@unique([contractId, position])
+  @@map("milestones")
+}
+
+// One submission of a milestone's work. Every version is kept.
+model Deliverable {
+  id          String   @id @default(uuid()) @db.Uuid
+  milestoneId String   @map("milestone_id") @db.Uuid
+  version     Int
+  url         String
+  note        String?
+  // Set when the startup asks for changes on this version.
+  feedback    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@unique([milestoneId, version])
+  @@map("deliverables")
+}
+
+// ---------------------------------------------------------------------------
+// Disputes
+// ---------------------------------------------------------------------------
+
+enum DisputeStatus {
+  open
+  resolved
+}
+
+enum DisputeOutcome {
+  pay_specialist
+  refund_startup
+  split
+}
+
+model Dispute {
+  id               String          @id @default(uuid()) @db.Uuid
+  milestoneId      String          @map("milestone_id") @db.Uuid
+  openedById       String          @map("opened_by") @db.Uuid
+  reason           String
+  status           DisputeStatus   @default(open)
+  outcome          DisputeOutcome?
+  // USDC each side receives, set when a manager resolves it.
+  specialistAmount Decimal?        @map("specialist_amount") @db.Decimal(20, 7)
+  startupAmount    Decimal?        @map("startup_amount") @db.Decimal(20, 7)
+  resolutionNote   String?         @map("resolution_note")
+  resolvedById     String?         @map("resolved_by") @db.Uuid
+  resolvedAt       DateTime?       @map("resolved_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  milestone  Milestone         @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  openedBy   User              @relation("DisputeOpenedBy", fields: [openedById], references: [id], onDelete: Cascade)
+  resolvedBy User?             @relation("DisputeResolvedBy", fields: [resolvedById], references: [id])
+  evidence   DisputeEvidence[]
+
+  @@index([milestoneId])
+  @@index([status])
+  @@map("disputes")
+}
+
+model DisputeEvidence {
+  id        String   @id @default(uuid()) @db.Uuid
+  disputeId String   @map("dispute_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  url       String?
+  comment   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  dispute Dispute @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
+}
+
+// ---------------------------------------------------------------------------
+// On-chain operations
+// ---------------------------------------------------------------------------
+
+enum ChainOperationKind {
+  trustline
+  deploy
+  fund
+  approve
+  release
+  dispute
+  resolve
+}
+
+enum ChainOperationStatus {
+  prepared
+  confirmed
+  failed
+}
+
+// Every Stellar transaction Pocket builds or sends. A transaction a user has to
+// sign is stored as `prepared` with its hash; only a signed transaction with
+// that same hash is accepted back, so the API never relays anything it did not
+// build for that user and that purpose.
+model ChainOperation {
+  id          String               @id @default(uuid()) @db.Uuid
+  kind        ChainOperationKind
+  status      ChainOperationStatus @default(prepared)
+  // Hash of the transaction, hex. Signatures do not change it.
+  txHash      String               @unique @map("tx_hash")
+  // Who has to sign it; null when the platform signs.
+  signerId    String?              @map("signer_id") @db.Uuid
+  contractId  String?              @map("contract_id") @db.Uuid
+  milestoneId String?              @map("milestone_id") @db.Uuid
+  // USDC moved by this operation, when it moves any.
+  amount      Decimal?             @db.Decimal(20, 7)
+  error       String?
+  createdAt   DateTime             @default(now()) @map("created_at")
+  confirmedAt DateTime?            @map("confirmed_at")
+
+  signer    User?      @relation(fields: [signerId], references: [id], onDelete: SetNull)
+  contract  Contract?  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  milestone Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([milestoneId])
+  @@map("chain_operations")
 }
