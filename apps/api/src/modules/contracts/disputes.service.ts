@@ -1,0 +1,249 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, type DisputeStatus, type DisputeEvidence } from '@prisma/client';
+import type { AuthUser } from '../../common/types/auth';
+import { PrismaService } from '../../prisma/prisma.service';
+import type { PreparedTransaction } from '../stellar/chain-operations.service';
+import { AddEvidenceDto, OpenDisputeDto, ResolveDisputeDto } from './dto/dispute.dto';
+import { EscrowService } from './escrow.service';
+import { MilestonesService } from './milestones.service';
+
+/** A milestone can be disputed while the work is under way or delivered. */
+const DISPUTABLE = ['pending', 'delivered', 'changes_requested'] as const;
+
+@Injectable()
+export class DisputesService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly escrow: EscrowService,
+    private readonly milestones: MilestonesService,
+  ) {}
+
+  /** Dispute transaction for the party opening it to sign. */
+  async prepareOpen(user: AuthUser, milestoneId: string): Promise<PreparedTransaction> {
+    const milestone = await this.disputableMilestone(user, milestoneId);
+    return this.escrow.prepareDispute(
+      milestone.contract,
+      milestone,
+      user.sub,
+      user.stellarAddress,
+    );
+  }
+
+  /**
+   * Broadcast the signed dispute. The milestone's funds freeze on chain until a
+   * manager decides.
+   */
+  async open(user: AuthUser, milestoneId: string, dto: OpenDisputeDto) {
+    const milestone = await this.disputableMilestone(user, milestoneId);
+    await this.escrow.submitDispute(
+      milestone.contractId,
+      milestoneId,
+      dto.signedXdr,
+      user.sub,
+    );
+    if (
+      !(await this.escrow.milestoneHas(
+        milestone.contract,
+        milestone.position,
+        'disputed',
+      ))
+    ) {
+      throw new ConflictException('The dispute does not show on chain yet. Try again');
+    }
+
+    const [dispute] = await this.prisma.$transaction([
+      this.prisma.dispute.create({
+        data: { milestoneId, openedById: user.sub, reason: dto.reason },
+      }),
+      this.prisma.milestone.update({
+        where: { id: milestoneId },
+        data: { status: 'disputed' },
+      }),
+    ]);
+    return dispute;
+  }
+
+  /** Either party, or a manager, adds a link or a comment to an open dispute. */
+  async addEvidence(
+    user: AuthUser,
+    disputeId: string,
+    dto: AddEvidenceDto,
+  ): Promise<DisputeEvidence> {
+    const dispute = await this.load(disputeId);
+    assertParticipant(user, dispute.milestone.contract);
+    if (dispute.status !== 'open') {
+      throw new BadRequestException('This dispute is already resolved');
+    }
+    return this.prisma.disputeEvidence.create({
+      data: { ...dto, disputeId, authorId: user.sub },
+    });
+  }
+
+  /** Disputes for managers, oldest first so nobody waits forever. */
+  list(status: DisputeStatus = 'open') {
+    return this.prisma.dispute.findMany({
+      where: { status },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        milestone: {
+          select: {
+            id: true,
+            title: true,
+            amount: true,
+            contract: { select: { id: true, job: { select: { title: true } } } },
+          },
+        },
+      },
+    });
+  }
+
+  async detail(user: AuthUser, disputeId: string) {
+    const dispute = await this.prisma.dispute.findUnique({
+      where: { id: disputeId },
+      include: {
+        milestone: {
+          include: {
+            contract: { select: { id: true, startupId: true, specialistId: true } },
+            deliverables: { orderBy: { version: 'asc' } },
+          },
+        },
+        evidence: {
+          orderBy: { createdAt: 'asc' },
+          include: { author: { select: { id: true, role: true } } },
+        },
+      },
+    });
+    if (!dispute) throw new NotFoundException('Dispute not found');
+    assertParticipant(user, dispute.milestone.contract);
+    return dispute;
+  }
+
+  /**
+   * A manager decides: everything to the specialist, everything back to the
+   * startup, or a split. Pocket executes it on the escrow, which can only pay
+   * the two parties.
+   */
+  async resolve(manager: AuthUser, disputeId: string, dto: ResolveDisputeDto) {
+    const dispute = await this.load(disputeId);
+    if (dispute.status !== 'open') {
+      throw new BadRequestException('This dispute is already resolved');
+    }
+    const { milestone } = dispute;
+    const { specialistAmount, startupAmount } = splitFor(dto, milestone.amount);
+
+    const parties = await this.prisma.contract.findUniqueOrThrow({
+      where: { id: milestone.contractId },
+      select: {
+        startup: { select: { stellarAddress: true } },
+        specialist: { select: { stellarAddress: true } },
+      },
+    });
+
+    const alreadyResolved = await this.escrow.milestoneHas(
+      milestone.contract,
+      milestone.position,
+      'resolved',
+    );
+    if (!alreadyResolved) {
+      await this.escrow.resolve(milestone.contract, milestone, [
+        { address: parties.specialist.stellarAddress, amount: specialistAmount },
+        { address: parties.startup.stellarAddress, amount: startupAmount },
+      ]);
+      if (
+        !(await this.escrow.milestoneHas(
+          milestone.contract,
+          milestone.position,
+          'resolved',
+        ))
+      ) {
+        throw new ConflictException(
+          'The resolution does not show on chain yet. Try again',
+        );
+      }
+    }
+
+    const [resolved] = await this.prisma.$transaction([
+      this.prisma.dispute.update({
+        where: { id: disputeId },
+        data: {
+          status: 'resolved',
+          outcome: dto.outcome,
+          specialistAmount,
+          startupAmount,
+          resolutionNote: dto.note,
+          resolvedById: manager.sub,
+          resolvedAt: new Date(),
+        },
+      }),
+      this.prisma.milestone.update({
+        where: { id: milestone.id },
+        data: { status: 'resolved' },
+      }),
+    ]);
+    await this.milestones.completeIfDone(milestone.contractId);
+    return resolved;
+  }
+
+  private async disputableMilestone(user: AuthUser, milestoneId: string) {
+    const milestone = await this.milestones.load(milestoneId);
+    const { contract } = milestone;
+    if (contract.startupId !== user.sub && contract.specialistId !== user.sub) {
+      throw new ForbiddenException('Only the two parties can open a dispute');
+    }
+    if (contract.status !== 'active') {
+      throw new BadRequestException('Only a funded contract can be disputed');
+    }
+    if (!(DISPUTABLE as readonly string[]).includes(milestone.status)) {
+      throw new BadRequestException('This milestone can no longer be disputed');
+    }
+    return milestone;
+  }
+
+  private async load(disputeId: string) {
+    const dispute = await this.prisma.dispute.findUnique({
+      where: { id: disputeId },
+      include: { milestone: { include: { contract: true } } },
+    });
+    if (!dispute) throw new NotFoundException('Dispute not found');
+    return dispute;
+  }
+}
+
+/** How much of the milestone each side receives. */
+export function splitFor(
+  dto: Pick<ResolveDisputeDto, 'outcome' | 'specialistAmount'>,
+  total: Prisma.Decimal,
+): { specialistAmount: Prisma.Decimal; startupAmount: Prisma.Decimal } {
+  const zero = new Prisma.Decimal(0);
+  if (dto.outcome === 'pay_specialist')
+    return { specialistAmount: total, startupAmount: zero };
+  if (dto.outcome === 'refund_startup')
+    return { specialistAmount: zero, startupAmount: total };
+
+  const specialistAmount = new Prisma.Decimal(dto.specialistAmount ?? 0);
+  if (specialistAmount.lte(0) || specialistAmount.gte(total)) {
+    throw new BadRequestException(
+      `A split gives each side part of the ${total.toString()} USDC. Use pay_specialist or refund_startup for all of it`,
+    );
+  }
+  return { specialistAmount, startupAmount: total.minus(specialistAmount) };
+}
+
+function assertParticipant(
+  user: AuthUser,
+  contract: { startupId: string; specialistId: string },
+): void {
+  if (
+    user.role !== 'manager' &&
+    contract.startupId !== user.sub &&
+    contract.specialistId !== user.sub
+  ) {
+    throw new ForbiddenException('You are not a party to this dispute');
+  }
+}
