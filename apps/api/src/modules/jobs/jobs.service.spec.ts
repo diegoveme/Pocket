@@ -1,0 +1,207 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import type { AuthUser } from '../../common/types/auth';
+import type { PrismaService } from '../../prisma/prisma.service';
+import type { CreateJobDto } from './dto/create-job.dto';
+import { JobsService } from './jobs.service';
+
+const startup: AuthUser = {
+  sub: 'startup-1',
+  role: 'startup',
+  stellarAddress: 'GSTARTUP',
+};
+const specialist: AuthUser = {
+  sub: 'specialist-1',
+  role: 'specialist',
+  stellarAddress: 'GSPECIALIST',
+};
+
+function futureDate(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+const dto: CreateJobDto = {
+  title: 'Outbound campaign for our wallet',
+  description: 'x'.repeat(60),
+  category: 'sales',
+  deliverables: 'A list of 200 qualified leads',
+  budget: 500,
+  deadline: futureDate(30),
+};
+
+describe('JobsService', () => {
+  let prisma: {
+    job: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+      count: jest.Mock;
+      update: jest.Mock;
+    };
+    application: { updateMany: jest.Mock };
+    startupProfile: { findUnique: jest.Mock };
+    $transaction: jest.Mock;
+  };
+  let service: JobsService;
+
+  beforeEach(() => {
+    prisma = {
+      job: {
+        create: jest.fn(),
+        findMany: jest.fn().mockReturnValue([]),
+        findUnique: jest.fn(),
+        count: jest.fn().mockReturnValue(0),
+        update: jest.fn(),
+      },
+      application: { updateMany: jest.fn() },
+      startupProfile: { findUnique: jest.fn().mockResolvedValue({ id: 'profile-1' }) },
+      $transaction: jest.fn(async (ops: unknown[]) => ops),
+    };
+    service = new JobsService(prisma as unknown as PrismaService);
+  });
+
+  describe('create', () => {
+    it('posts a job owned by the startup', async () => {
+      await service.create(startup, dto);
+      expect(prisma.job.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          startupId: 'startup-1',
+          title: dto.title,
+          deadline: new Date(dto.deadline),
+        }),
+      });
+    });
+
+    it('refuses a specialist', async () => {
+      await expect(service.create(specialist, dto)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('refuses a deadline in the past', async () => {
+      await expect(
+        service.create(startup, { ...dto, deadline: '2020-01-01' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.job.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a deadline of today', async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      await service.create(startup, { ...dto, deadline: today });
+      expect(prisma.job.create).toHaveBeenCalled();
+    });
+
+    it('requires a startup profile first', async () => {
+      prisma.startupProfile.findUnique.mockResolvedValue(null);
+      await expect(service.create(startup, dto)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(prisma.job.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('board', () => {
+    it('lists only open jobs, newest first', async () => {
+      await service.board({});
+      expect(prisma.job.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { status: 'open' },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          skip: 0,
+        }),
+      );
+    });
+
+    it('filters by category and free text', async () => {
+      await service.board({ category: 'growth', search: '  wallet ' });
+      expect(prisma.job.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: 'open',
+            category: 'growth',
+            OR: [
+              { title: { contains: 'wallet', mode: 'insensitive' } },
+              { description: { contains: 'wallet', mode: 'insensitive' } },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('flattens who posted the job and how many applied', async () => {
+      prisma.job.findMany.mockReturnValue([
+        {
+          id: 'job-1',
+          title: 'A job',
+          startup: { startupProfile: { companyName: 'Acme', logoUrl: null } },
+          _count: { applications: 3 },
+        },
+      ]);
+      prisma.job.count.mockReturnValue(1);
+
+      const board = await service.board({});
+
+      expect(board.total).toBe(1);
+      expect(board.items[0]).toEqual({
+        id: 'job-1',
+        title: 'A job',
+        startup: { companyName: 'Acme', logoUrl: null },
+        applicationCount: 3,
+      });
+    });
+  });
+
+  describe('close', () => {
+    it('closes an open job and rejects the applications still waiting', async () => {
+      prisma.job.findUnique.mockResolvedValue({
+        id: 'job-1',
+        startupId: 'startup-1',
+        status: 'open',
+      });
+
+      await service.close(startup, 'job-1');
+
+      expect(prisma.job.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { status: 'closed' },
+      });
+      expect(prisma.application.updateMany).toHaveBeenCalledWith({
+        where: { jobId: 'job-1', status: 'submitted' },
+        data: expect.objectContaining({ status: 'rejected' }),
+      });
+    });
+
+    it('does not close a job that already has someone hired', async () => {
+      prisma.job.findUnique.mockResolvedValue({
+        id: 'job-1',
+        startupId: 'startup-1',
+        status: 'in_progress',
+      });
+      await expect(service.close(startup, 'job-1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it("does not close another startup's job", async () => {
+      prisma.job.findUnique.mockResolvedValue({
+        id: 'job-1',
+        startupId: 'startup-2',
+        status: 'open',
+      });
+      await expect(service.close(startup, 'job-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('fails when the job does not exist', async () => {
+      prisma.job.findUnique.mockResolvedValue(null);
+      await expect(service.close(startup, 'missing')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+});
