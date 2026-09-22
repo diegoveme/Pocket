@@ -69,12 +69,17 @@ export class EscrowService {
       trustline: { address: this.stellar.usdcIssuer, symbol: 'USDC' },
     });
 
-    const { contractId } = await this.operations.executeAsPlatform(
+    const { operation, contractId } = await this.operations.executeAsPlatform(
       { kind: 'deploy', contractId: input.contract.id },
       unsigned,
     );
     if (!contractId) {
-      throw new ConflictException('Trustless Work did not return the escrow contract id');
+      // Without the id Pocket cannot use the escrow, so free the step for a retry.
+      const error = new ConflictException(
+        'Trustless Work did not return the escrow contract id. Try again',
+      );
+      await this.operations.markFailed(operation.txHash, error);
+      throw error;
     }
     return contractId;
   }
