@@ -40,9 +40,22 @@ The API never relays a transaction it did not build, so the Trustless Work API k
 
 Delivery stays off chain: the escrow contract does not require the milestone status to change before approval, so the specialist never has to sign anything to deliver.
 
+## Safeguards
+
+- **Each step happens once.** Deploy and fund once per contract; approve, release, dispute and resolve once per milestone. A confirmed operation holds a unique `step_key` (`fund:<contract id>`, `approve:<milestone id>`...), claimed before anything is sent, so a double click or two tabs cannot fund an escrow twice: the second request gets `409` and never reaches the network. A failed operation frees its key, so the step can be retried.
+- **Funding is checked first.** Before preparing the funding transaction, the API reads the startup's spendable USDC on Horizon (balance minus what open DEX offers lock) and answers `INSUFFICIENT_USDC` with the missing amount, instead of handing over a transaction that fails after the user signs it.
+- **The chain decides whether a milestone can be approved.** The V1 contract lets the approver approve a milestone that is in dispute, but that milestone can then only be settled by the dispute resolution, never released. So the API reads the milestone's flags before preparing an approval and again before sending it: a disputed, released or resolved milestone is refused, and one already approved is synced so its payment can be released.
+- **Rate limit.** Trustless Work allows 50 requests per minute per API key. A `429` is retried up to 3 times, waiting what `Retry-After` asks or 1, 2 and 4 seconds, and then reported as a clear `503`.
+
+## Leftover funds
+
+Pocket funds each escrow with exactly the sum of its milestones, and releases and resolutions pay out each milestone in full, so a finished escrow holds nothing. A balance can only be left over if someone deposits into the escrow outside Pocket (anyone can call `fund-escrow`). V1's `withdraw-remaining-funds` can return it: only the dispute resolver (Pocket) can call it, once every milestone is released, resolved or disputed, and it pays the same 0.3% fee. Pocket does not expose it yet; if it happens, a manager can run it by hand with the platform key.
+
 ## Fees
 
 Trustless Work keeps a fixed 0.3% of every amount it pays out, on releases and on dispute resolutions, on testnet as well ([release phase](https://docs.trustlesswork.com/trustless-work/v2-en/introduction/technology-overview/escrow-lifecycle/release-phase.md)). Deploying, funding, approving and opening a dispute pay no fee, only the network's. Measured on testnet: a 1 USDC milestone paid the specialist 0.997 USDC, and a 2 USDC milestone split 1.5 and 0.5 paid 1.4955 and 0.4985. Pocket's own fee is 0%.
+
+The hire, accept and fund screens show what the specialist receives after the fee. The math lives in `@pocket/shared` (`afterTrustlessWorkFee`, `totalAfterTrustlessWorkFee`), charged on each payout on its own.
 
 ## Setup
 
