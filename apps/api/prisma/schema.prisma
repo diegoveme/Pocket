@@ -423,6 +423,12 @@ model ChainOperation {
   milestoneId String?              @map("milestone_id") @db.Uuid
   // USDC moved by this operation, when it moves any.
   amount      Decimal?             @db.Decimal(20, 7)
+  // Set while the operation is confirmed, to "<kind>:<contract or milestone id>".
+  // Unique, so each escrow step happens once per contract (deploy, fund) or per
+  // milestone (approve, release, dispute, resolve), even with parallel requests.
+  // Cleared when the operation fails so the step can be retried. Null for
+  // trustlines, which are not tied to a contract.
+  stepKey     String?              @unique @map("step_key")
   error       String?
   createdAt   DateTime             @default(now()) @map("created_at")
   confirmedAt DateTime?            @map("confirmed_at")
