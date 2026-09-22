@@ -42,7 +42,7 @@ Delivery stays off chain: the escrow contract does not require the milestone sta
 
 ## Fees
 
-Trustless Work keeps 0.3% of every amount it pays out, on releases and on dispute resolutions, on testnet as well. Measured on testnet: a 1 USDC milestone paid the specialist 0.997 USDC, and a 2 USDC milestone split 1.5 and 0.5 paid 1.4955 and 0.4985. Pocket's own fee is 0%.
+Trustless Work keeps a fixed 0.3% of every amount it pays out, on releases and on dispute resolutions, on testnet as well ([release phase](https://docs.trustlesswork.com/trustless-work/v2-en/introduction/technology-overview/escrow-lifecycle/release-phase.md)). Deploying, funding, approving and opening a dispute pay no fee, only the network's. Measured on testnet: a 1 USDC milestone paid the specialist 0.997 USDC, and a 2 USDC milestone split 1.5 and 0.5 paid 1.4955 and 0.4985. Pocket's own fee is 0%.
 
 ## Setup
 
