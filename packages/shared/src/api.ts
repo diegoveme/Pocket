@@ -51,6 +51,10 @@ export interface LoginResponse {
 /** Error codes the API returns in the `code` field of a 4xx body. */
 export const ApiErrorCode = {
   RoleRequired: 'ROLE_REQUIRED',
+  /** The wallet has never been funded, so it does not exist on the network yet. */
+  StellarAccountNotFound: 'STELLAR_ACCOUNT_NOT_FOUND',
+  /** The wallet has to trust USDC before it can receive or send it. */
+  UsdcTrustlineRequired: 'USDC_TRUSTLINE_REQUIRED',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
