@@ -16,7 +16,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "lint": "eslint \"{src,test}/**/*.ts\"",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "stellar:setup": "bun scripts/setup-platform.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11",
