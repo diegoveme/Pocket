@@ -33,9 +33,29 @@ export class ChainOperationsService {
     signerId: string,
     amount?: Prisma.Decimal.Value,
   ): Promise<PreparedTransaction> {
-    const operation = await this.prisma.chainOperation.create({
-      data: { ...scope, txHash: this.stellar.hashOf(xdr), signerId, amount },
-    });
+    const txHash = this.stellar.hashOf(xdr);
+    let operation: ChainOperation;
+    try {
+      operation = await this.prisma.chainOperation.create({
+        data: { ...scope, txHash, signerId, amount },
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      // Trustless Work can build the very same transaction twice in a row (same
+      // sequence and time bounds). Hand back the one already prepared for this
+      // user and step; anything else with that hash is not theirs to reuse.
+      const existing = await this.prisma.chainOperation.findUnique({ where: { txHash } });
+      if (
+        existing?.status !== 'prepared' ||
+        existing.signerId !== signerId ||
+        existing.kind !== scope.kind ||
+        existing.contractId !== (scope.contractId ?? null) ||
+        existing.milestoneId !== (scope.milestoneId ?? null)
+      ) {
+        throw new ConflictException('This transaction was already used. Try again');
+      }
+      operation = existing;
+    }
     return {
       operationId: operation.id,
       xdr,
