@@ -38,7 +38,8 @@ Pocket never holds user funds: each party signs their own escrow operations with
 ```
 Pocket/
 ├── apps/
-│   └── api/            NestJS REST API
+│   ├── api/            NestJS REST API
+│   └── web/            Next.js web app
 ├── packages/
 │   └── shared/         Enums and API contracts shared by the API and the web client
 └── docs/               Engineering documentation
@@ -62,6 +63,11 @@ bun run stellar:setup    # one time per network: the platform account trusts USD
 
 # Run the API on http://localhost:3000/api (Swagger UI at /api/docs)
 bun run dev
+
+# In another terminal: the web app on http://localhost:3001
+cd ../web
+cp .env.example .env.local
+bun run dev
 ```
 
 Run the tests with `bun run test` and the linter with `bun run lint`.
@@ -77,4 +83,4 @@ Early MVP, running on Stellar testnet.
 - [x] Contracts and milestones
 - [x] Escrow with Trustless Work: fund, deliver, approve, release, verified on testnet
 - [x] Disputes resolved by managers
-- [ ] Web client
+- [x] Web client: every screen of the MVP, for startups, specialists and managers
