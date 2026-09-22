@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import type { ChainOperation, ChainOperationKind, Prisma } from '@prisma/client';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { Prisma, type ChainOperation, type ChainOperationKind } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StellarService } from './stellar.service';
 import { TrustlessWorkClient } from './trustless-work.client';
@@ -60,17 +60,19 @@ export class ChainOperationsService {
       throw new BadRequestException('signedXdr is not a valid transaction');
     }
 
-    const claimed = await this.prisma.chainOperation.updateMany({
-      where: {
-        txHash,
-        signerId,
-        status: 'prepared',
-        kind: scope.kind,
-        contractId: scope.contractId ?? null,
-        milestoneId: scope.milestoneId ?? null,
-      },
-      data: { status: 'confirmed', confirmedAt: new Date() },
-    });
+    const claimed = await claimStep(scope, () =>
+      this.prisma.chainOperation.updateMany({
+        where: {
+          txHash,
+          signerId,
+          status: 'prepared',
+          kind: scope.kind,
+          contractId: scope.contractId ?? null,
+          milestoneId: scope.milestoneId ?? null,
+        },
+        data: { status: 'confirmed', confirmedAt: new Date(), stepKey: stepKeyOf(scope) },
+      }),
+    );
     if (claimed.count !== 1) {
       throw new BadRequestException(
         'This transaction was not prepared for you, or it was already submitted',
@@ -100,15 +102,26 @@ export class ChainOperationsService {
     amount?: Prisma.Decimal.Value,
   ): Promise<{ operation: ChainOperation; contractId?: string }> {
     const signed = this.stellar.signAsPlatform(unsignedXdr);
-    const operation = await this.prisma.chainOperation.create({
-      data: { ...scope, txHash: this.stellar.hashOf(signed), amount },
-    });
+    // Claimed before sending, like user operations: a parallel request for the
+    // same step fails here instead of reaching the network.
+    const operation = await claimStep(scope, () =>
+      this.prisma.chainOperation.create({
+        data: {
+          ...scope,
+          txHash: this.stellar.hashOf(signed),
+          amount,
+          status: 'confirmed',
+          confirmedAt: new Date(),
+          stepKey: stepKeyOf(scope),
+        },
+      }),
+    );
 
     try {
       const { contractId } = await this.trustlessWork.send(signed);
       const confirmed = await this.prisma.chainOperation.update({
         where: { id: operation.id },
-        data: { status: 'confirmed', confirmedAt: new Date() },
+        data: { confirmedAt: new Date() },
       });
       return { operation: confirmed, contractId };
     } catch (error) {
@@ -117,14 +130,54 @@ export class ChainOperationsService {
     }
   }
 
-  private async markFailed(txHash: string, error: unknown): Promise<void> {
+  /**
+   * Record that a sent operation did not have the expected effect, so its step
+   * is free to be tried again.
+   */
+  async markFailed(txHash: string, error: unknown): Promise<void> {
     await this.prisma.chainOperation.update({
       where: { txHash },
       data: {
         status: 'failed',
         confirmedAt: null,
+        stepKey: null,
         error: error instanceof Error ? error.message : String(error),
       },
     });
   }
+}
+
+/**
+ * The key that makes an escrow step unique while it is confirmed. Deploy and
+ * fund happen once per contract; the rest once per milestone. Trustlines are
+ * per user and can be sent again, so they have none.
+ */
+export function stepKeyOf(scope: OperationScope): string | null {
+  if (scope.kind === 'trustline') return null;
+  const target =
+    scope.kind === 'deploy' || scope.kind === 'fund'
+      ? scope.contractId
+      : scope.milestoneId;
+  if (!target) {
+    throw new Error(`A ${scope.kind} operation needs its contract or milestone`);
+  }
+  return `${scope.kind}:${target}`;
+}
+
+/** Run a claim and turn a clash on the step key into a clear conflict. */
+async function claimStep<T>(scope: OperationScope, claim: () => Promise<T>): Promise<T> {
+  try {
+    return await claim();
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ConflictException(
+        `This ${scope.kind} step was already sent. Refresh to see where it stands`,
+      );
+    }
+    throw error;
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
