@@ -1,0 +1,201 @@
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { AuthUser } from '../../common/types/auth';
+import type { PrismaService } from '../../prisma/prisma.service';
+import { DisputesService, splitFor } from './disputes.service';
+import type { EscrowService } from './escrow.service';
+import type { MilestonesService } from './milestones.service';
+
+const startup: AuthUser = {
+  sub: 'startup-1',
+  role: 'startup',
+  stellarAddress: 'GSTARTUP',
+};
+const outsider: AuthUser = {
+  sub: 'other-1',
+  role: 'specialist',
+  stellarAddress: 'GOTHER',
+};
+const manager: AuthUser = {
+  sub: 'manager-1',
+  role: 'manager',
+  stellarAddress: 'GMANAGER',
+};
+
+const contract = {
+  id: 'contract-1',
+  startupId: 'startup-1',
+  specialistId: 'specialist-1',
+  status: 'active',
+  escrowId: 'CESCROW',
+};
+
+describe('splitFor', () => {
+  const total = new Prisma.Decimal(100);
+
+  it('pays everything to the specialist', () => {
+    const split = splitFor({ outcome: 'pay_specialist' }, total);
+    expect(split.specialistAmount.toString()).toBe('100');
+    expect(split.startupAmount.toString()).toBe('0');
+  });
+
+  it('refunds everything to the startup', () => {
+    const split = splitFor({ outcome: 'refund_startup' }, total);
+    expect(split.specialistAmount.toString()).toBe('0');
+    expect(split.startupAmount.toString()).toBe('100');
+  });
+
+  it('splits exactly, without floating point drift', () => {
+    const split = splitFor(
+      { outcome: 'split', specialistAmount: 33.3333333 },
+      new Prisma.Decimal('100.0000001'),
+    );
+    expect(split.startupAmount.toString()).toBe('66.6666668');
+  });
+
+  it.each([0, 100, 150])('refuses a split that gives %s to the specialist', (amount) => {
+    expect(() => splitFor({ outcome: 'split', specialistAmount: amount }, total)).toThrow(
+      BadRequestException,
+    );
+  });
+});
+
+describe('DisputesService', () => {
+  let prisma: {
+    dispute: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
+    disputeEvidence: { create: jest.Mock };
+    milestone: { update: jest.Mock };
+    contract: { findUniqueOrThrow: jest.Mock };
+    $transaction: jest.Mock;
+  };
+  let escrow: {
+    prepareDispute: jest.Mock;
+    milestoneHas: jest.Mock;
+    resolve: jest.Mock;
+  };
+  let milestones: { load: jest.Mock; completeIfDone: jest.Mock };
+  let service: DisputesService;
+
+  beforeEach(() => {
+    prisma = {
+      dispute: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+      disputeEvidence: { create: jest.fn() },
+      milestone: { update: jest.fn() },
+      contract: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          startup: { stellarAddress: 'GSTARTUP' },
+          specialist: { stellarAddress: 'GSPECIALIST' },
+        }),
+      },
+      $transaction: jest.fn(async (ops: unknown[]) => Promise.all(ops)),
+    };
+    escrow = {
+      prepareDispute: jest.fn(),
+      milestoneHas: jest.fn(),
+      resolve: jest.fn(),
+    };
+    milestones = { load: jest.fn(), completeIfDone: jest.fn() };
+    service = new DisputesService(
+      prisma as unknown as PrismaService,
+      escrow as unknown as EscrowService,
+      milestones as unknown as MilestonesService,
+    );
+  });
+
+  describe('prepareOpen', () => {
+    it.each(['pending', 'delivered', 'changes_requested'])(
+      'lets a party dispute a %s milestone',
+      async (status) => {
+        milestones.load.mockResolvedValue({ id: 'milestone-1', status, contract });
+        await service.prepareOpen(startup, 'milestone-1');
+        expect(escrow.prepareDispute).toHaveBeenCalled();
+      },
+    );
+
+    it.each(['approved', 'paid', 'disputed', 'resolved'])(
+      'does not dispute a %s milestone',
+      async (status) => {
+        milestones.load.mockResolvedValue({ id: 'milestone-1', status, contract });
+        await expect(service.prepareOpen(startup, 'milestone-1')).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+      },
+    );
+
+    it('refuses someone outside the contract', async () => {
+      milestones.load.mockResolvedValue({
+        id: 'milestone-1',
+        status: 'pending',
+        contract,
+      });
+      await expect(service.prepareOpen(outsider, 'milestone-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+  });
+
+  describe('resolve', () => {
+    const openDispute = {
+      id: 'dispute-1',
+      status: 'open',
+      milestone: {
+        id: 'milestone-1',
+        contractId: 'contract-1',
+        position: 1,
+        amount: new Prisma.Decimal(2),
+        contract,
+      },
+    };
+
+    it('executes the split on chain and closes the dispute', async () => {
+      prisma.dispute.findUnique.mockResolvedValue(openDispute);
+      escrow.milestoneHas.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+      await service.resolve(manager, 'dispute-1', {
+        outcome: 'split',
+        specialistAmount: 1.5,
+        note: 'Most of the work was delivered',
+      });
+
+      const shares = escrow.resolve.mock.calls[0][2] as {
+        address: string;
+        amount: Prisma.Decimal;
+      }[];
+      expect(shares.map((s) => [s.address, s.amount.toString()])).toEqual([
+        ['GSPECIALIST', '1.5'],
+        ['GSTARTUP', '0.5'],
+      ]);
+      expect(prisma.dispute.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'resolved',
+            resolvedById: 'manager-1',
+          }),
+        }),
+      );
+      expect(milestones.completeIfDone).toHaveBeenCalledWith('contract-1');
+    });
+
+    it('does not resolve the same dispute twice', async () => {
+      prisma.dispute.findUnique.mockResolvedValue({ ...openDispute, status: 'resolved' });
+      await expect(
+        service.resolve(manager, 'dispute-1', {
+          outcome: 'refund_startup',
+          note: 'Nothing was delivered',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(escrow.resolve).not.toHaveBeenCalled();
+    });
+  });
+
+  it('keeps evidence out of a resolved dispute', async () => {
+    prisma.dispute.findUnique.mockResolvedValue({
+      id: 'dispute-1',
+      status: 'resolved',
+      milestone: { contract },
+    });
+    await expect(
+      service.addEvidence(startup, 'dispute-1', { comment: 'Late evidence' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
