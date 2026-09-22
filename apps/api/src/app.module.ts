@@ -6,9 +6,11 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { VerifiedGuard } from './common/guards/verified.guard';
 import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
+import { ContractsModule } from './modules/contracts/contracts.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { ManagerModule } from './modules/manager/manager.module';
 import { ProfilesModule } from './modules/profiles/profiles.module';
+import { StellarModule } from './modules/stellar/stellar.module';
 import { VerificationModule } from './modules/verification/verification.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -28,6 +30,8 @@ import configuration, { validateEnv } from './config/configuration';
     ManagerModule,
     ProfilesModule,
     JobsModule,
+    StellarModule,
+    ContractsModule,
   ],
   controllers: [HealthController],
   providers: [
