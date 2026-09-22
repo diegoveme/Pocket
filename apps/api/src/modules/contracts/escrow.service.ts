@@ -238,6 +238,16 @@ export class EscrowService {
     return milestone?.flags?.[flag] === true;
   }
 
+  /** Every flag of a milestone as the chain shows it now, in one read. */
+  async milestoneFlags(
+    contract: Pick<Contract, 'escrowId'>,
+    position: number,
+  ): Promise<Partial<Record<Flag, boolean>>> {
+    const milestone = await this.milestoneState(contract, position);
+    if (!milestone) throw new NotFoundException('The escrow has no such milestone');
+    return milestone.flags ?? {};
+  }
+
   private async milestoneState(
     contract: Pick<Contract, 'escrowId'>,
     position: number,
