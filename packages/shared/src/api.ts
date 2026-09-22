@@ -1,4 +1,6 @@
 import type {
+  ApplicationStatus,
+  JobStatus,
   ServiceCategory,
   StartupStage,
   UserRole,
@@ -139,4 +141,80 @@ export interface SpecialistDirectory {
   total: number;
   limit: number;
   offset: number;
+}
+
+// ---------------------------------------------------------------------------
+// Jobs: startups post them, specialists apply
+// ---------------------------------------------------------------------------
+
+/** POST /jobs. Budget is in USDC. */
+export interface JobInput {
+  title: string;
+  description: string;
+  category: ServiceCategory;
+  /** What the startup expects to receive at the end. */
+  deliverables: string;
+  budget: number;
+  /** Calendar date, YYYY-MM-DD. */
+  deadline: string;
+}
+
+export interface Job {
+  id: string;
+  startupId: string;
+  title: string;
+  description: string;
+  category: ServiceCategory;
+  deliverables: string;
+  /** USDC, serialized as a string to keep decimal precision. */
+  budget: string;
+  deadline: IsoDate;
+  status: JobStatus;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+/** A job as listed on the board, with who posted it. */
+export interface JobListing extends Job {
+  startup: { companyName: string; logoUrl?: string | null } | null;
+  applicationCount: number;
+}
+
+/** GET /jobs */
+export interface JobBoard {
+  items: JobListing[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/** POST /jobs/:id/applications. Price is in USDC and may differ from the budget. */
+export interface ApplicationInput {
+  proposal: string;
+  price: number;
+  estimatedDays: number;
+}
+
+export interface Application {
+  id: string;
+  jobId: string;
+  specialistId: string;
+  proposal: string;
+  /** USDC, serialized as a string to keep decimal precision. */
+  price: string;
+  estimatedDays: number;
+  status: ApplicationStatus;
+  decidedAt?: IsoDate | null;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+/** GET /jobs/:id/applications: what the startup sees about each applicant. */
+export interface Applicant extends Application {
+  specialist: Pick<SpecialistProfile, 'displayName' | 'headline' | 'avatarUrl'> | null;
+}
+
+/** GET /applications/mine: the specialist's applications with their job. */
+export interface MyApplication extends Application {
+  job: Pick<Job, 'id' | 'title' | 'category' | 'budget' | 'deadline' | 'status'>;
 }

@@ -50,3 +50,25 @@ export const VerificationDecision = {
 } as const;
 export type VerificationDecision =
   (typeof VerificationDecision)[keyof typeof VerificationDecision];
+
+/**
+ * Job lifecycle. A startup can close a job only while it is open, before
+ * anyone is hired.
+ */
+export const JobStatus = {
+  Open: 'open',
+  InProgress: 'in_progress',
+  Completed: 'completed',
+  Closed: 'closed',
+} as const;
+export type JobStatus = (typeof JobStatus)[keyof typeof JobStatus];
+
+/** A specialist's application to a job. */
+export const ApplicationStatus = {
+  Submitted: 'submitted',
+  Accepted: 'accepted',
+  Rejected: 'rejected',
+  Withdrawn: 'withdrawn',
+} as const;
+export type ApplicationStatus =
+  (typeof ApplicationStatus)[keyof typeof ApplicationStatus];
