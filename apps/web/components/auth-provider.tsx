@@ -1,0 +1,146 @@
+'use client';
+
+import type { ChallengeResponse, LoginResponse, SignUpRole, User } from '@pocket/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
+import { ApiError, api, getToken, setToken, subscribeToken } from '@/lib/api';
+import { connectWallet, signXdr } from '@/lib/wallet';
+
+type Status = 'loading' | 'signed-out' | 'signed-in';
+
+/** The first sign-in of a new wallet: signed, waiting for the user to pick a role. */
+interface PendingSignUp {
+  stellarAddress: string;
+  signedXdr: string;
+}
+
+interface AuthContextValue {
+  status: Status;
+  user: User | null;
+  pendingSignUp: PendingSignUp | null;
+  /** Connect a wallet and sign the login challenge. */
+  signIn: () => Promise<void>;
+  /** Finish a first sign-in by choosing startup or specialist. */
+  chooseRole: (role: SignUpRole) => Promise<void>;
+  cancelSignUp: () => void;
+  signOut: () => void;
+  /** Reload the user, for example after a manager approved them. */
+  refreshUser: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+const ME = ['auth', 'me'] as const;
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  const [pendingSignUp, setPendingSignUp] = useState<PendingSignUp | null>(null);
+  // The token lives in localStorage: undefined while rendering on the server.
+  const token = useSyncExternalStore(subscribeToken, getToken, () => undefined);
+
+  const me = useQuery({
+    queryKey: ME,
+    queryFn: () => api<User>('/users/me'),
+    enabled: Boolean(token),
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  // An expired or revoked token signs the user out.
+  useEffect(() => {
+    if (me.error instanceof ApiError && me.error.status === 401) setToken(null);
+  }, [me.error]);
+
+  const status: Status =
+    token === undefined || (token && me.isPending)
+      ? 'loading'
+      : token && me.data
+        ? 'signed-in'
+        : 'signed-out';
+
+  const finishLogin = useCallback(
+    (response: LoginResponse) => {
+      queryClient.clear();
+      queryClient.setQueryData(ME, response.user);
+      setPendingSignUp(null);
+      setToken(response.accessToken);
+    },
+    [queryClient],
+  );
+
+  const signIn = useCallback(async () => {
+    const { address } = await connectWallet();
+    const challenge = await api<ChallengeResponse>('/auth/challenge', {
+      method: 'POST',
+      body: { stellarAddress: address },
+    });
+    const signedXdr = await signXdr(challenge.xdr, address, challenge.networkPassphrase);
+    try {
+      finishLogin(
+        await api<LoginResponse>('/auth/login', {
+          method: 'POST',
+          body: { stellarAddress: address, signedXdr },
+        }),
+      );
+    } catch (error) {
+      // A wallet Pocket has never seen: ask for the role, then resend the same signature.
+      if (error instanceof ApiError && error.code === 'ROLE_REQUIRED') {
+        setPendingSignUp({ stellarAddress: address, signedXdr });
+        return;
+      }
+      throw error;
+    }
+  }, [finishLogin]);
+
+  const chooseRole = useCallback(
+    async (role: SignUpRole) => {
+      if (!pendingSignUp) return;
+      finishLogin(
+        await api<LoginResponse>('/auth/login', {
+          method: 'POST',
+          body: { ...pendingSignUp, role },
+        }),
+      );
+    },
+    [pendingSignUp, finishLogin],
+  );
+
+  const signOut = useCallback(() => {
+    setToken(null);
+    setPendingSignUp(null);
+    queryClient.clear();
+  }, [queryClient]);
+
+  const refreshUser = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ME });
+  }, [queryClient]);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      status,
+      user: status === 'signed-in' ? (me.data ?? null) : null,
+      pendingSignUp,
+      signIn,
+      chooseRole,
+      cancelSignUp: () => setPendingSignUp(null),
+      signOut,
+      refreshUser,
+    }),
+    [status, me.data, pendingSignUp, signIn, chooseRole, signOut, refreshUser],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used inside AuthProvider');
+  return context;
+}
