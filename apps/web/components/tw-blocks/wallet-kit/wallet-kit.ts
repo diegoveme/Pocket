@@ -72,6 +72,15 @@ export const getSelectedWallet = async (): Promise<ModuleInterface> => {
 };
 
 /**
+ * The network the selected wallet is on. Not every wallet can tell
+ * (Lobstr, Rabet and xBull cannot), so this rejects for those.
+ */
+export const getWalletNetwork = async (): Promise<{ networkPassphrase?: string }> => {
+  const { StellarWalletsKit } = await loadWalletKit();
+  return StellarWalletsKit.getNetwork();
+};
+
+/**
  * Disconnect the current wallet.
  */
 export const disconnectWalletKit = async (): Promise<void> => {

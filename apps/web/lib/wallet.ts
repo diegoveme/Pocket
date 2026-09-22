@@ -2,10 +2,40 @@
 
 import {
   getSelectedWallet,
+  getWalletNetwork,
   openAuthModal,
   signTransaction,
 } from '@/components/tw-blocks/wallet-kit/wallet-kit';
 import { api } from './api';
+
+const NETWORK_NAMES: Record<string, string> = {
+  'Public Global Stellar Network ; September 2015': 'Mainnet',
+  'Test SDF Network ; September 2015': 'Testnet',
+};
+
+function networkName(passphrase: string): string {
+  return NETWORK_NAMES[passphrase] ?? 'another network';
+}
+
+/**
+ * Stop before asking for a signature the wallet would refuse, or sign for the
+ * wrong network: say which network to switch to. Wallets that cannot report
+ * their network are let through.
+ */
+async function requireWalletNetwork(expected: string | undefined): Promise<void> {
+  if (!expected) return;
+  let actual: string | undefined;
+  try {
+    ({ networkPassphrase: actual } = await getWalletNetwork());
+  } catch {
+    return;
+  }
+  if (actual && actual !== expected) {
+    throw new Error(
+      `Your wallet is on ${networkName(actual)}. Switch it to ${networkName(expected)} and try again.`,
+    );
+  }
+}
 
 /** Open the wallet picker and return the chosen address and wallet name. */
 export async function connectWallet(): Promise<{ address: string; walletName: string }> {
@@ -15,11 +45,12 @@ export async function connectWallet(): Promise<{ address: string; walletName: st
 }
 
 /** Sign a transaction XDR with the connected wallet. */
-export function signXdr(
+export async function signXdr(
   xdr: string,
   address: string,
   networkPassphrase?: string,
 ): Promise<string> {
+  await requireWalletNetwork(networkPassphrase);
   return signTransaction({ unsignedTransaction: xdr, address, networkPassphrase });
 }
 
