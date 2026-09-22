@@ -258,6 +258,7 @@ export class ContractsService {
       throw new BadRequestException('This contract is not waiting for funding');
     }
     await this.requireUsdcReady(user.stellarAddress);
+    await this.requireUsdcFor(user.stellarAddress, contract.amount);
     return this.escrow.prepareFund(contract, user.sub, user.stellarAddress);
   }
 
@@ -327,6 +328,20 @@ export class ContractsService {
         message: 'Enable USDC in your wallet first',
       });
     }
+  }
+
+  /**
+   * Refuse to prepare a funding the wallet cannot pay, with the numbers, instead
+   * of letting the transaction fail on chain after the user signs it.
+   */
+  private async requireUsdcFor(address: string, amount: Prisma.Decimal): Promise<void> {
+    const spendable = await this.stellar.spendableUsdc(address);
+    if (spendable !== null && amount.lte(spendable)) return;
+    const have = new Prisma.Decimal(spendable ?? 0);
+    throw new BadRequestException({
+      code: ApiErrorCode.InsufficientUsdc,
+      message: `Your wallet holds ${have.toString()} USDC and the escrow needs ${amount.toString()} USDC. Add ${amount.minus(have).toString()} USDC and try again`,
+    });
   }
 
   /** Contact email from each user's approved verification. */
