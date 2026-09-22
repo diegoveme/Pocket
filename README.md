@@ -72,7 +72,8 @@ Early MVP, running on Stellar testnet.
 - [x] Wallet sign-in (SEP-10 style challenge) with startup and specialist roles
 - [x] Manual verification reviewed by managers
 - [x] Standardized startup and specialist profiles, with a public specialist directory
-- [ ] Hiring flow
+- [x] Jobs and applications: startups post, specialists apply
+- [ ] Contracts and milestones
 - [ ] Escrow with Trustless Work: fund, deliver, approve, release
 - [ ] Disputes resolved by managers
 - [ ] Web client
