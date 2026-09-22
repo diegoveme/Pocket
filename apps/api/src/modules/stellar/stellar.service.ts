@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import {
   Asset,
   BASE_FEE,
@@ -88,6 +89,29 @@ export class StellarService implements OnApplicationBootstrap {
       return hasTrustline ? 'ready' : 'no_trustline';
     } catch (error) {
       if (error instanceof NotFoundError) return 'no_account';
+      throw error;
+    }
+  }
+
+  /**
+   * USDC the account can spend right now: its balance minus what is locked in
+   * open DEX offers. Null when the account does not exist or does not trust
+   * USDC. Returned as a string to keep the 7 decimals.
+   */
+  async spendableUsdc(address: string): Promise<string | null> {
+    try {
+      const account = await this.horizon.loadAccount(address);
+      const line = account.balances.find(
+        (balance) =>
+          'asset_code' in balance &&
+          balance.asset_code === this.usdc.getCode() &&
+          balance.asset_issuer === this.usdcIssuer,
+      );
+      if (!line) return null;
+      const locked = 'selling_liabilities' in line ? line.selling_liabilities : '0';
+      return new Prisma.Decimal(line.balance).minus(locked).toFixed(7);
+    } catch (error) {
+      if (error instanceof NotFoundError) return null;
       throw error;
     }
   }
