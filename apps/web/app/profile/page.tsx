@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Field, compact, formValues } from '@/components/form';
 import { Loading, PageHeader } from '@/components/page';
+import { Onboarding } from '@/components/onboarding';
 import { RequireAuth } from '@/components/require-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,6 +49,7 @@ function Profile({ user }: { user: User }) {
 
   return (
     <div className="mx-auto max-w-2xl">
+      <Onboarding className="mb-6" />
       <PageHeader
         title="My profile"
         description="Every profile follows the same template, so startups and specialists can compare them at a glance."

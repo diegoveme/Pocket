@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { JobCard } from '@/components/job-card';
 import { EmptyState, ErrorAlert, Loading, PageHeader } from '@/components/page';
+import { Onboarding } from '@/components/onboarding';
 import { RequireAuth } from '@/components/require-auth';
 import { UsdcStatus } from '@/components/usdc-status';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ function Dashboard({ user }: { user: User }) {
 
   return (
     <div className="space-y-6">
+      <Onboarding className="mb-6" />
       <PageHeader
         title="My jobs"
         description="Everything you posted, from open to completed."

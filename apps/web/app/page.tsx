@@ -1,5 +1,6 @@
 import { BadgeCheckIcon, HandCoinsIcon, LockIcon, ScaleIcon } from 'lucide-react';
 import Link from 'next/link';
+import { Onboarding } from '@/components/onboarding';
 import { Button } from '@/components/ui/button';
 
 const STEPS = [
@@ -28,6 +29,9 @@ const STEPS = [
 export default function HomePage() {
   return (
     <div className="space-y-16">
+      {/* Only shows for a signed-in user who is not set up yet. */}
+      <Onboarding />
+
       <section className="relative overflow-hidden rounded-3xl bg-navy px-6 py-16 text-off-white md:px-14 md:py-20">
         <div className="absolute -right-24 -top-24 size-72 rounded-full bg-celeste/20 blur-3xl" />
         <div className="absolute -bottom-32 right-24 size-80 rounded-full bg-yellow/10 blur-3xl" />

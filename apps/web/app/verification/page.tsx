@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/components/auth-provider';
 import { Field, compact, formValues } from '@/components/form';
 import { Loading, PageHeader } from '@/components/page';
+import { Onboarding } from '@/components/onboarding';
 import { RequireAuth } from '@/components/require-auth';
 import { StatusBadge } from '@/components/status-badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -62,6 +63,7 @@ function Verification({ user }: { user: User }) {
 
   return (
     <div className="mx-auto max-w-2xl">
+      <Onboarding className="mb-6" />
       <PageHeader
         title="Verification"
         description="Pocket reviews every account by hand before it can use the marketplace. Links are enough; no documents needed."

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { EmptyState, ErrorAlert, Loading, PageHeader } from '@/components/page';
+import { Onboarding } from '@/components/onboarding';
 import { RequireAuth } from '@/components/require-auth';
 import { StatusBadge } from '@/components/status-badge';
 import { UsdcStatus } from '@/components/usdc-status';
@@ -46,6 +47,7 @@ function Applications({ user }: { user: User }) {
 
   return (
     <div className="space-y-6">
+      <Onboarding className="mb-6" />
       <PageHeader
         title="My applications"
         description="When a startup picks you, the terms show up in Contracts for you to accept."
