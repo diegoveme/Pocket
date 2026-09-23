@@ -27,10 +27,12 @@ const ROLE_LINKS: Record<UserRole, { href: string; label: string }[]> = {
   startup: [
     { href: '/dashboard', label: 'My jobs' },
     { href: '/contracts', label: 'Contracts' },
+    { href: '/profile', label: 'Profile' },
   ],
   specialist: [
     { href: '/applications', label: 'My applications' },
     { href: '/contracts', label: 'Contracts' },
+    { href: '/profile', label: 'Profile' },
   ],
   manager: [
     { href: '/manager/verifications', label: 'Verifications' },
