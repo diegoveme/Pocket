@@ -13,6 +13,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/auth-provider';
+import { Avatar } from '@/components/avatar';
 import { Field, formValues } from '@/components/form';
 import { Detail, ErrorAlert, Loading, PageHeader } from '@/components/page';
 import { StatusBadge } from '@/components/status-badge';
@@ -48,7 +49,23 @@ export default function JobPage() {
       <div>
         <PageHeader
           title={data.title}
-          description={data.startup?.companyName ?? 'A verified startup'}
+          description={
+            data.startup ? (
+              <Link
+                href={`/specialists/${data.startupId}`}
+                className="inline-flex items-center gap-2 underline"
+              >
+                <Avatar
+                  name={data.startup.companyName}
+                  url={data.startup.logoUrl}
+                  size={24}
+                />
+                {data.startup.companyName}
+              </Link>
+            ) : (
+              'A verified startup'
+            )
+          }
         />
         <Card>
           <CardContent className="space-y-6 pt-6">
