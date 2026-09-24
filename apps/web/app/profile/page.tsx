@@ -3,6 +3,7 @@
 import {
   ServiceCategory,
   StartupStage,
+  type CaseStudy,
   type SpecialistProfile,
   type StartupProfile,
   type User,
@@ -88,7 +89,8 @@ interface FormProps<T> {
 function StartupForm({ initial, saving, onSave }: FormProps<StartupProfile>) {
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onSave(compact(formValues(event.currentTarget)));
+    const values = formValues(event.currentTarget);
+    onSave(compact({ ...values, languages: splitList(values.languages, /,/) }));
   }
 
   return (
@@ -176,15 +178,51 @@ function StartupForm({ initial, saving, onSave }: FormProps<StartupProfile>) {
           defaultValue={initial?.logoUrl ?? ''}
         />
       </Field>
-      <Field label="Location" htmlFor="location">
-        <Input
-          id="location"
-          name="location"
-          minLength={2}
-          maxLength={120}
-          defaultValue={initial?.location ?? ''}
-        />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Registered name"
+          htmlFor="legalName"
+          hint="If it differs from the trading name."
+        >
+          <Input
+            id="legalName"
+            name="legalName"
+            maxLength={160}
+            defaultValue={initial?.legalName ?? ''}
+          />
+        </Field>
+        <Field
+          label="Your role"
+          htmlFor="contactRole"
+          hint="Who signs the contracts, e.g. Co-founder."
+        >
+          <Input
+            id="contactRole"
+            name="contactRole"
+            maxLength={80}
+            defaultValue={initial?.contactRole ?? ''}
+          />
+        </Field>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Working languages" htmlFor="languages" hint="Separated by commas.">
+          <Input
+            id="languages"
+            name="languages"
+            placeholder="Spanish, English"
+            defaultValue={initial?.languages.join(', ')}
+          />
+        </Field>
+        <Field label="Location" htmlFor="location">
+          <Input
+            id="location"
+            name="location"
+            minLength={2}
+            maxLength={120}
+            defaultValue={initial?.location ?? ''}
+          />
+        </Field>
+      </div>
       <Button type="submit" size="lg" disabled={saving}>
         {saving ? 'Saving...' : 'Save profile'}
       </Button>
@@ -212,16 +250,26 @@ function SpecialistForm({ initial, saving, onSave }: FormProps<SpecialistProfile
       return;
     }
     const values = formValues(event.currentTarget);
+    if (!values.linkedinUrl && !values.portfolioUrl) {
+      toast.error('Add your LinkedIn or your portfolio, at least one');
+      return;
+    }
     onSave(
       compact({
         ...values,
         categories,
         skills: splitList(values.skills, /,/),
-        caseStudies: splitList(values.caseStudies, /\s+/),
+        tools: splitList(values.tools, /,/),
+        languages: splitList(values.languages, /,/),
+        caseStudies: parseCaseStudies(values.caseStudies),
         hourlyRate: values.hourlyRate ? Number(values.hourlyRate) : undefined,
         minProjectBudget: values.minProjectBudget
           ? Number(values.minProjectBudget)
           : undefined,
+        yearsExperience: values.yearsExperience
+          ? Number(values.yearsExperience)
+          : undefined,
+        weeklyHours: values.weeklyHours ? Number(values.weeklyHours) : undefined,
       }),
     );
   }
@@ -287,15 +335,68 @@ function SpecialistForm({ initial, saving, onSave }: FormProps<SpecialistProfile
         <Input id="skills" name="skills" defaultValue={initial?.skills.join(', ')} />
       </Field>
       <Field
-        label="Past work"
+        label="Tools"
+        htmlFor="tools"
+        hint="Separated by commas, e.g. Meta Ads, GA4, HubSpot."
+      >
+        <Input id="tools" name="tools" defaultValue={initial?.tools.join(', ')} />
+      </Field>
+      <Field
+        label="Past work with its result"
         htmlFor="caseStudies"
-        hint="Links, one per line, up to 10."
+        hint="One per line, as: link | what it achieved. The result is what a startup reads first."
       >
         <Textarea
           id="caseStudies"
           name="caseStudies"
           rows={3}
-          defaultValue={initial?.caseStudies.join('\n')}
+          placeholder="https://example.com/campaign | +40% followers in 2 months"
+          defaultValue={initial?.caseStudies
+            .map((study) => `${study.url} | ${study.result}`)
+            .join('\n')}
+        />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Years of experience" htmlFor="yearsExperience">
+          <Input
+            id="yearsExperience"
+            name="yearsExperience"
+            type="number"
+            min={0}
+            max={60}
+            defaultValue={initial?.yearsExperience ?? ''}
+          />
+        </Field>
+        <Field label="Hours a week" htmlFor="weeklyHours" hint="What you can take on.">
+          <Input
+            id="weeklyHours"
+            name="weeklyHours"
+            type="number"
+            min={1}
+            max={80}
+            defaultValue={initial?.weeklyHours ?? ''}
+          />
+        </Field>
+        <Field label="Time zone" htmlFor="timezone">
+          <Input
+            id="timezone"
+            name="timezone"
+            maxLength={60}
+            placeholder="UTC-6"
+            defaultValue={initial?.timezone ?? ''}
+          />
+        </Field>
+      </div>
+      <Field
+        label="Languages"
+        htmlFor="languages"
+        hint="Separated by commas. Startups in other countries look at this."
+      >
+        <Input
+          id="languages"
+          name="languages"
+          placeholder="Spanish, English"
+          defaultValue={initial?.languages.join(', ')}
         />
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -368,4 +469,14 @@ function splitList(value: string | undefined, separator: RegExp): string[] {
     .split(separator)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+/** One line per piece of work: `link | what it achieved`. */
+function parseCaseStudies(value: string | undefined): CaseStudy[] {
+  return splitList(value, /\n/)
+    .map((line) => {
+      const [url = '', ...rest] = line.split('|');
+      return { url: url.trim(), result: rest.join('|').trim() };
+    })
+    .filter((study) => study.url !== '' && study.result !== '');
 }

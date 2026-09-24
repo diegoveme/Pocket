@@ -85,7 +85,11 @@ function SpecialistView({ profile }: { profile: SpecialistProfile }) {
         ) : null}
         <Links
           links={[
-            ...profile.caseStudies.map((url) => ({ label: url, url })),
+            ...profile.caseStudies.map((study) => ({
+              // What it achieved says more than the link itself.
+              label: study.result ? `${study.result}` : study.url,
+              url: study.url,
+            })),
             ...(profile.portfolioUrl
               ? [{ label: 'Portfolio', url: profile.portfolioUrl }]
               : []),
