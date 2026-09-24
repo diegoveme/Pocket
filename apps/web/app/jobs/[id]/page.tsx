@@ -1,14 +1,22 @@
 'use client';
 
-import type { JobListing, MyApplication, User } from '@pocket/shared';
+import {
+  TRUSTLESS_WORK_FEE_PERCENT,
+  afterTrustlessWorkFee,
+  type JobListing,
+  type MyApplication,
+  type User,
+} from '@pocket/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/components/auth-provider';
 import { Field, formValues } from '@/components/form';
 import { Detail, ErrorAlert, Loading, PageHeader } from '@/components/page';
 import { StatusBadge } from '@/components/status-badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -20,7 +28,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage } from '@/lib/api';
-import { CATEGORY_LABELS, date, usdc } from '@/lib/format';
+import { CATEGORY_LABELS, date, isoInDays, usdc } from '@/lib/format';
 
 export default function JobPage() {
   const { id } = useParams<{ id: string }>();
@@ -94,6 +102,8 @@ export default function JobPage() {
 }
 
 function ApplyCard({ job, user }: { job: JobListing; user: User }) {
+  const [price, setPrice] = useState(String(Number(job.budget)));
+  const [days, setDays] = useState('');
   const queryClient = useQueryClient();
   const mine = useQuery({
     queryKey: ['applications', 'mine'],
@@ -203,10 +213,16 @@ function ApplyCard({ job, user }: { job: JobListing; user: User }) {
                 required
                 min={1}
                 step="any"
-                defaultValue={Number(job.budget)}
+                value={price}
+                onChange={(event) => setPrice(event.target.value)}
               />
             </Field>
-            <Field label="Days" htmlFor="estimatedDays" required>
+            <Field
+              label="Days"
+              htmlFor="estimatedDays"
+              hint="Counted from the day the startup funds the escrow."
+              required
+            >
               <Input
                 id="estimatedDays"
                 name="estimatedDays"
@@ -214,15 +230,56 @@ function ApplyCard({ job, user }: { job: JobListing; user: User }) {
                 required
                 min={1}
                 max={365}
+                value={days}
+                onChange={(event) => setDays(event.target.value)}
               />
             </Field>
           </div>
+
+          <PriceNote price={price} budget={job.budget} />
+          <DeadlineNote days={days} deadline={job.deadline} />
+
           <Button type="submit" className="w-full" disabled={apply.isPending}>
             {apply.isPending ? 'Sending...' : 'Send application'}
           </Button>
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+/** How the offer compares to the budget, and what is left after the escrow fee. */
+function PriceNote({ price, budget }: { price: string; budget: string }) {
+  const offered = Number(price);
+  const posted = Number(budget);
+  if (!Number.isFinite(offered) || offered <= 0) return null;
+  const difference = offered - posted;
+  const net = usdc(afterTrustlessWorkFee(offered));
+  return (
+    <p className="text-sm text-muted-foreground">
+      {difference === 0
+        ? `Same as the budget. You receive ${net} after the ${TRUSTLESS_WORK_FEE_PERCENT}% Trustless Work fee.`
+        : `${difference > 0 ? '+' : '-'}${usdc(Math.abs(difference))} ${
+            difference > 0 ? 'over' : 'under'
+          } the ${usdc(budget)} budget. You receive ${net} after the ${TRUSTLESS_WORK_FEE_PERCENT}% Trustless Work fee.`}
+    </p>
+  );
+}
+
+/** Warns when the work would end after the day the startup needs it. */
+function DeadlineNote({ days, deadline }: { days: string; deadline: string }) {
+  const estimate = Number(days);
+  if (!Number.isFinite(estimate) || estimate <= 0) return null;
+  const endsOn = isoInDays(estimate);
+  if (endsOn <= deadline.slice(0, 10)) return null;
+  return (
+    <Alert variant="destructive">
+      <AlertTitle>That is past the deadline</AlertTitle>
+      <AlertDescription>
+        Starting today, {estimate} days end on {date(endsOn)}, after the {date(deadline)}{' '}
+        the startup asked for. You can still apply, but say why in your proposal.
+      </AlertDescription>
+    </Alert>
   );
 }
 

@@ -35,6 +35,11 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** The calendar day `days` from today, as `YYYY-MM-DD`. */
+export function isoInDays(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
 export const CATEGORY_LABELS: Record<ServiceCategory, string> = {
   growth: 'Growth',
   sales: 'Sales',
