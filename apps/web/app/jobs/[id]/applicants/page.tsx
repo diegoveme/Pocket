@@ -63,7 +63,26 @@ function Applicants() {
                   <p className="text-sm text-muted-foreground">
                     {applicant.specialist?.headline}
                   </p>
-                  <p className="mt-3 whitespace-pre-line text-sm">{applicant.proposal}</p>
+                  <p className="mt-3 whitespace-pre-line text-sm">{applicant.approach}</p>
+                  {applicant.similarWorkUrl ? (
+                    <p className="mt-2 text-sm">
+                      <span className="text-muted-foreground">Similar work: </span>
+                      <a
+                        href={applicant.similarWorkUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline"
+                      >
+                        {applicant.similarWorkUrl}
+                      </a>
+                    </p>
+                  ) : null}
+                  {applicant.needsFromStartup ? (
+                    <p className="mt-2 whitespace-pre-line text-sm">
+                      <span className="text-muted-foreground">Needs from you: </span>
+                      {applicant.needsFromStartup}
+                    </p>
+                  ) : null}
                   <p className="mt-3 text-xs text-muted-foreground">
                     Applied {dateTime(applicant.createdAt)}
                   </p>
@@ -76,7 +95,7 @@ function Applicants() {
                     {applicant.estimatedDays} days
                   </p>
                   {canHire && applicant.status === 'submitted' ? (
-                    <HireDialog applicant={applicant} />
+                    <HireDialog applicant={applicant} job={job.data} />
                   ) : null}
                 </div>
               </CardContent>

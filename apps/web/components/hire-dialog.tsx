@@ -4,6 +4,7 @@ import {
   TRUSTLESS_WORK_FEE_PERCENT,
   totalAfterTrustlessWorkFee,
   type Applicant,
+  type JobListing,
 } from '@pocket/shared';
 import { useMutation } from '@tanstack/react-query';
 import { PlusIcon, Trash2Icon } from 'lucide-react';
@@ -24,54 +25,74 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { api, errorMessage } from '@/lib/api';
 import { todayIso, usdc } from '@/lib/format';
+import { fromUnits, toUnits } from '@/lib/usdc';
 import { cn } from '@/lib/utils';
 
 interface MilestoneDraft {
   title: string;
   description: string;
+  acceptanceCriteria: string;
   amount: string;
   dueDate: string;
 }
 
 const MAX_MILESTONES = 5;
 
-/** Amounts in units of 10^-7 USDC, so the running total has no floating point drift. */
-function toStroops(amount: string): bigint {
-  const [whole = '0', fraction = ''] = amount.trim().split('.');
-  if (!/^\d*$/.test(whole) || !/^\d*$/.test(fraction)) return BigInt(0);
-  return (
-    BigInt(whole || '0') * BigInt(10_000_000) + BigInt((fraction + '0000000').slice(0, 7))
-  );
-}
-
-function fromStroops(value: bigint): string {
-  const sign = value < BigInt(0) ? '-' : '';
-  const abs = value < BigInt(0) ? -value : value;
-  const whole = abs / BigInt(10_000_000);
-  const fraction = (abs % BigInt(10_000_000))
-    .toString()
-    .padStart(7, '0')
-    .replace(/0+$/, '');
-  return `${sign}${whole}${fraction ? `.${fraction}` : ''}`;
+/**
+ * The plan the startup already posted with the job, ready to send. When the
+ * specialist offered a different price, every amount moves with it and the last
+ * one absorbs the rounding, so the milestones still add up exactly.
+ */
+function planFrom(job: JobListing | undefined, price: string): MilestoneDraft[] {
+  if (!job || job.milestones.length === 0) {
+    return [
+      { title: '', description: '', acceptanceCriteria: '', amount: price, dueDate: '' },
+    ];
+  }
+  const budget = toUnits(job.budget);
+  const agreed = toUnits(price);
+  let assigned = BigInt(0);
+  return job.milestones.map((milestone, index) => {
+    const share =
+      index === job.milestones.length - 1
+        ? agreed - assigned
+        : budget === BigInt(0)
+          ? BigInt(0)
+          : (toUnits(milestone.amount) * agreed) / budget;
+    assigned += share;
+    return {
+      title: milestone.title,
+      description: milestone.description,
+      acceptanceCriteria: milestone.acceptanceCriteria,
+      amount: fromUnits(share),
+      dueDate: milestone.dueDate.slice(0, 10),
+    };
+  });
 }
 
 /**
- * The startup hires an applicant: it splits the agreed price into 1 to 5
- * milestones. The API refuses totals that do not match exactly, so the dialog
- * shows how much is left to assign.
+ * The startup hires an applicant. The milestones come from the job, so the
+ * terms are the ones both sides already read; they can still be adjusted if
+ * the two of them negotiated something else.
  */
-export function HireDialog({ applicant }: { applicant: Applicant }) {
+export function HireDialog({
+  applicant,
+  job,
+}: {
+  applicant: Applicant;
+  job?: JobListing;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [milestones, setMilestones] = useState<MilestoneDraft[]>([
-    { title: '', description: '', amount: applicant.price, dueDate: '' },
-  ]);
+  const [milestones, setMilestones] = useState<MilestoneDraft[]>(() =>
+    planFrom(job, applicant.price),
+  );
 
   const total = milestones.reduce(
-    (sum, milestone) => sum + toStroops(milestone.amount),
+    (sum, milestone) => sum + toUnits(milestone.amount),
     BigInt(0),
   );
-  const remaining = toStroops(applicant.price) - total;
+  const remaining = toUnits(applicant.price) - total;
 
   const hire = useMutation({
     mutationFn: () =>
@@ -82,6 +103,9 @@ export function HireDialog({ applicant }: { applicant: Applicant }) {
           milestones: milestones.map((milestone) => ({
             title: milestone.title.trim(),
             description: milestone.description.trim(),
+            ...(milestone.acceptanceCriteria.trim()
+              ? { acceptanceCriteria: milestone.acceptanceCriteria.trim() }
+              : {}),
             amount: Number(milestone.amount),
             dueDate: milestone.dueDate,
           })),
@@ -160,6 +184,15 @@ export function HireDialog({ applicant }: { applicant: Applicant }) {
                 value={milestone.description}
                 onChange={(event) => update(index, { description: event.target.value })}
               />
+              <Textarea
+                placeholder="What it has to meet to be approved"
+                maxLength={2000}
+                rows={2}
+                value={milestone.acceptanceCriteria}
+                onChange={(event) =>
+                  update(index, { acceptanceCriteria: event.target.value })
+                }
+              />
               <div className="grid grid-cols-2 gap-3">
                 <Input
                   type="number"
@@ -191,7 +224,8 @@ export function HireDialog({ applicant }: { applicant: Applicant }) {
                   {
                     title: '',
                     description: '',
-                    amount: remaining > BigInt(0) ? fromStroops(remaining) : '',
+                    acceptanceCriteria: '',
+                    amount: remaining > BigInt(0) ? fromUnits(remaining) : '',
                     dueDate: '',
                   },
                 ])
@@ -210,8 +244,8 @@ export function HireDialog({ applicant }: { applicant: Applicant }) {
             {remaining === BigInt(0)
               ? 'The milestones add up to the agreed price.'
               : remaining > BigInt(0)
-                ? `${usdc(fromStroops(remaining))} still to assign.`
-                : `${usdc(fromStroops(-remaining))} over the agreed price.`}
+                ? `${usdc(fromUnits(remaining))} still to assign.`
+                : `${usdc(fromUnits(-remaining))} over the agreed price.`}
           </p>
 
           {remaining === BigInt(0) ? (
@@ -221,7 +255,7 @@ export function HireDialog({ applicant }: { applicant: Applicant }) {
               {applicant.specialist?.displayName ?? 'the specialist'} receives{' '}
               {usdc(
                 totalAfterTrustlessWorkFee(
-                  milestones.map((milestone) => fromStroops(toStroops(milestone.amount))),
+                  milestones.map((milestone) => fromUnits(toUnits(milestone.amount))),
                 ),
               )}{' '}
               in total. Pocket charges nothing.
