@@ -16,6 +16,7 @@ const LISTING_INCLUDE = {
     select: { startupProfile: { select: { companyName: true, logoUrl: true } } },
   },
   _count: { select: { applications: true } },
+  milestones: { orderBy: { position: 'asc' } },
 } satisfies Prisma.JobInclude;
 
 type JobWithListing = Prisma.JobGetPayload<{ include: typeof LISTING_INCLUDE }>;
@@ -32,6 +33,7 @@ export class JobsService {
     if (dto.deadline < todayUtc()) {
       throw new BadRequestException('The deadline cannot be in the past');
     }
+    assertMilestonesMatch(dto);
     const profile = await this.prisma.startupProfile.findUnique({
       where: { userId: user.sub },
       select: { id: true },
@@ -40,8 +42,20 @@ export class JobsService {
       throw new BadRequestException('Fill in your startup profile before posting a job');
     }
 
+    const { milestones, ...job } = dto;
     return await this.prisma.job.create({
-      data: { ...dto, deadline: new Date(dto.deadline), startupId: user.sub },
+      data: {
+        ...job,
+        deadline: new Date(dto.deadline),
+        startupId: user.sub,
+        milestones: {
+          create: milestones.map((milestone, position) => ({
+            ...milestone,
+            position,
+            dueDate: new Date(milestone.dueDate),
+          })),
+        },
+      },
     });
   }
 
@@ -140,4 +154,30 @@ function toListing({ startup, _count, ...job }: JobWithListing) {
 /** Today's date in UTC as YYYY-MM-DD, comparable with a deadline string. */
 function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * The milestones are the payment plan: together they are the budget, and none
+ * of them can be due after the job itself.
+ */
+function assertMilestonesMatch(dto: CreateJobDto): void {
+  const total = dto.milestones.reduce(
+    (sum, milestone) => sum.plus(milestone.amount),
+    new Prisma.Decimal(0),
+  );
+  if (!total.equals(dto.budget)) {
+    throw new BadRequestException(
+      `The milestones add up to ${total.toString()} USDC but the budget is ${dto.budget} USDC`,
+    );
+  }
+  const late = dto.milestones.find((milestone) => milestone.dueDate > dto.deadline);
+  if (late) {
+    throw new BadRequestException(
+      `"${late.title}" is due after the job deadline (${dto.deadline})`,
+    );
+  }
+  const past = dto.milestones.find((milestone) => milestone.dueDate < todayUtc());
+  if (past) {
+    throw new BadRequestException(`"${past.title}" is due in the past`);
+  }
 }

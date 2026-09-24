@@ -30,6 +30,22 @@ const dto: CreateJobDto = {
   deliverables: 'A list of 200 qualified leads',
   budget: 500,
   deadline: futureDate(30),
+  milestones: [
+    {
+      title: 'Lead list',
+      description: '200 qualified leads with contact details',
+      acceptanceCriteria: 'Every lead has a role, a company and a verified email',
+      amount: 300,
+      dueDate: futureDate(10),
+    },
+    {
+      title: 'Outreach sequences',
+      description: 'Three sequences loaded in the tool',
+      acceptanceCriteria: 'Sequences are live and sending',
+      amount: 200,
+      dueDate: futureDate(25),
+    },
+  ],
 };
 
 describe('JobsService', () => {
@@ -90,8 +106,45 @@ describe('JobsService', () => {
 
     it('accepts a deadline of today', async () => {
       const today = new Date().toISOString().slice(0, 10);
-      await service.create(startup, { ...dto, deadline: today });
+      await service.create(startup, {
+        ...dto,
+        deadline: today,
+        milestones: dto.milestones.map((milestone) => ({ ...milestone, dueDate: today })),
+      });
       expect(prisma.job.create).toHaveBeenCalled();
+    });
+
+    it('refuses milestones that do not add up to the budget', async () => {
+      await expect(
+        service.create(startup, { ...dto, budget: 600 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.job.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a milestone due after the job deadline', async () => {
+      await expect(
+        service.create(startup, {
+          ...dto,
+          milestones: [{ ...dto.milestones[0], amount: 500, dueDate: futureDate(60) }],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.job.create).not.toHaveBeenCalled();
+    });
+
+    it('stores the milestones in order, with their acceptance criteria', async () => {
+      await service.create(startup, dto);
+      expect(prisma.job.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            milestones: {
+              create: [
+                expect.objectContaining({ title: 'Lead list', position: 0 }),
+                expect.objectContaining({ title: 'Outreach sequences', position: 1 }),
+              ],
+            },
+          }),
+        }),
+      );
     });
 
     it('requires a startup profile first', async () => {
