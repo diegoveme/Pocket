@@ -339,9 +339,13 @@ export interface Milestone {
   position: number;
   title: string;
   description: string;
+  /** What it has to meet to be approved, carried over from the job. */
+  acceptanceCriteria?: string | null;
   amount: string;
   dueDate: IsoDate;
   status: MilestoneStatus;
+  /** Rounds of changes already asked for on this milestone. */
+  revisionsUsed: number;
   approvedAt: IsoDate | null;
   paidAt: IsoDate | null;
 }
@@ -399,7 +403,7 @@ export interface ContractSummary extends Contract {
 
 /** GET /contracts/:id */
 export interface ContractDetail extends Contract {
-  job: Pick<Job, 'id' | 'title' | 'category' | 'deadline' | 'status'>;
+  job: Pick<Job, 'id' | 'title' | 'category' | 'deadline' | 'status' | 'revisionRounds'>;
   startup: {
     id: string;
     stellarAddress: string;

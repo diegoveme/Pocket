@@ -17,7 +17,14 @@ import { EscrowService } from './escrow.service';
 
 const DETAIL_INCLUDE = {
   job: {
-    select: { id: true, title: true, category: true, deadline: true, status: true },
+    select: {
+      id: true,
+      title: true,
+      category: true,
+      deadline: true,
+      status: true,
+      revisionRounds: true,
+    },
   },
   startup: {
     select: {
