@@ -51,7 +51,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     enabled: Boolean(token),
     retry: false,
     staleTime: 60_000,
+    // A manager can approve an account at any moment, and until the client
+    // notices, the whole marketplace stays locked. While the account is not
+    // approved, ask often, so the approval opens the app on its own.
+    refetchInterval: (query) =>
+      query.state.data && query.state.data.verificationStatus !== 'approved'
+        ? 15_000
+        : false,
+    refetchIntervalInBackground: false,
   });
+
+  // Coming back to the tab is the other moment an approval may have landed.
+  useEffect(() => {
+    if (!token) return;
+    const onFocus = () => void queryClient.invalidateQueries({ queryKey: ME });
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [token, queryClient]);
 
   // An expired or revoked token signs the user out.
   useEffect(() => {

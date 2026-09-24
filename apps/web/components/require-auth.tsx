@@ -2,6 +2,7 @@
 
 import type { User, UserRole } from '@pocket/shared';
 import Link from 'next/link';
+import { useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { EmptyState, Loading } from '@/components/page';
 import { Button } from '@/components/ui/button';
@@ -55,12 +56,33 @@ export function RequireAuth({
     return (
       <EmptyState title="Your account is not verified yet">
         <p>{VERIFICATION_HINTS[user.verificationStatus]}</p>
-        <Button asChild className="mt-4">
-          <Link href="/verification">Go to verification</Link>
-        </Button>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Button asChild>
+            <Link href="/verification">Go to verification</Link>
+          </Button>
+          {user.verificationStatus === 'pending' ? <CheckAgainButton /> : null}
+        </div>
       </EmptyState>
     );
   }
 
   return <>{children(user)}</>;
+}
+
+/** Asks the API again, for the moment right after a manager approves. */
+function CheckAgainButton() {
+  const { refreshUser } = useAuth();
+  const [checking, setChecking] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      disabled={checking}
+      onClick={() => {
+        setChecking(true);
+        void refreshUser().finally(() => setChecking(false));
+      }}
+    >
+      {checking ? 'Checking...' : 'Check again'}
+    </Button>
+  );
 }
