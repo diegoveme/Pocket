@@ -74,6 +74,18 @@ export function MilestoneCard({
             <p className="mt-1 whitespace-pre-line text-sm text-foreground/80">
               {milestone.description}
             </p>
+            {milestone.acceptanceCriteria ? (
+              <p className="mt-2 whitespace-pre-line rounded-lg bg-celeste-light/40 px-3 py-2 text-sm">
+                <span className="font-medium text-navy">To be approved: </span>
+                {milestone.acceptanceCriteria}
+              </p>
+            ) : null}
+            {milestone.revisionsUsed > 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {milestone.revisionsUsed} of {contract.job.revisionRounds} rounds of
+                changes used.
+              </p>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-3">
             <span className="font-semibold text-navy">{usdc(milestone.amount)}</span>
