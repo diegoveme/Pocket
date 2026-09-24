@@ -67,7 +67,9 @@ export class MilestonesService {
     const [updated] = await this.prisma.$transaction([
       this.prisma.milestone.update({
         where: { id: milestoneId },
-        data: { status: 'changes_requested' },
+        // Each round is counted, so both sides can see how many the price
+        // included and how many are left.
+        data: { status: 'changes_requested', revisionsUsed: { increment: 1 } },
       }),
       this.prisma.deliverable.update({
         where: { id: latest.id },
