@@ -6,13 +6,31 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUrl,
   Length,
+  Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
+
+/** A piece of past work: where to see it and what it achieved. */
+export class CaseStudyDto {
+  @ApiProperty({ example: 'https://example.com/campaign' })
+  @IsUrl()
+  url: string;
+
+  @ApiProperty({
+    description: 'The outcome in one line',
+    example: '+40% followers in 2 months',
+  })
+  @IsString()
+  @Length(3, 160)
+  result: string;
+}
 
 /** The fixed template every specialist fills in. Rates are in USDC. */
 export class SpecialistProfileDto {
@@ -45,12 +63,56 @@ export class SpecialistProfileDto {
   @IsString({ each: true })
   skills?: string[];
 
-  @ApiPropertyOptional({ type: [String], description: 'Links to past work' })
+  @ApiPropertyOptional({
+    type: [CaseStudyDto],
+    description: 'Past work with its outcome. The best filter a startup has.',
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(10)
-  @IsUrl({}, { each: true })
-  caseStudies?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => CaseStudyDto)
+  caseStudies?: CaseStudyDto[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Tools they work with',
+    example: ['Meta Ads', 'GA4', 'HubSpot'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  tools?: string[];
+
+  @ApiPropertyOptional({ description: 'Years working in this field', example: 6 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  yearsExperience?: number;
+
+  @ApiPropertyOptional({ type: [String], example: ['Spanish', 'English'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  languages?: string[];
+
+  @ApiPropertyOptional({ example: 'UTC-6' })
+  @IsOptional()
+  @IsString()
+  @Length(2, 60)
+  timezone?: string;
+
+  @ApiPropertyOptional({ description: 'Hours a week they can take on', example: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(80)
+  weeklyHours?: number;
 
   @ApiPropertyOptional({ description: 'Hourly rate in USDC' })
   @IsOptional()

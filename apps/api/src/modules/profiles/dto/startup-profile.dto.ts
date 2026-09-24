@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StartupStage } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, IsUrl, Length } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Length,
+} from 'class-validator';
 
 /** The fixed template every startup fills in. */
 export class StartupProfileDto {
@@ -37,6 +45,31 @@ export class StartupProfileDto {
   @IsOptional()
   @IsUrl()
   logoUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Registered name, when it differs from the trading name',
+    example: 'Pocket Demo Labs S.A.',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(2, 160)
+  legalName?: string;
+
+  @ApiPropertyOptional({
+    description: 'Role of the person who signs the contracts',
+    example: 'Co-founder',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(2, 80)
+  contactRole?: string;
+
+  @ApiPropertyOptional({ type: [String], example: ['Spanish', 'English'] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  languages?: string[];
 
   @ApiPropertyOptional({ example: 'San Jose, Costa Rica' })
   @IsOptional()

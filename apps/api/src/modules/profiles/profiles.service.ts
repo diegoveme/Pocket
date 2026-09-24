@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, type SpecialistProfile, type StartupProfile } from '@prisma/client';
 import type { AuthUser } from '../../common/types/auth';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -30,10 +35,23 @@ export class ProfilesService {
     if (user.role !== 'specialist') {
       throw new ForbiddenException('Only specialists have a specialist profile');
     }
+    if (!dto.linkedinUrl && !dto.portfolioUrl) {
+      // A profile nobody can check is worth nothing to a startup choosing.
+      throw new BadRequestException('Add your LinkedIn or your portfolio, at least one');
+    }
+
+    // Case studies are stored as JSON: a link with the result it achieved.
+    const { caseStudies, ...rest } = dto;
+    const data = {
+      ...rest,
+      ...(caseStudies
+        ? { caseStudies: caseStudies as unknown as Prisma.InputJsonValue }
+        : {}),
+    };
     return await this.prisma.specialistProfile.upsert({
       where: { userId: user.sub },
-      create: { ...dto, userId: user.sub },
-      update: dto,
+      create: { ...data, userId: user.sub },
+      update: data,
     });
   }
 

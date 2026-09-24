@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { AuthUser } from '../../common/types/auth';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SpecialistProfileDto } from './dto/specialist-profile.dto';
@@ -25,6 +29,7 @@ const SPECIALIST_DTO = {
   headline: 'B2B SaaS outbound specialist',
   bio: 'x'.repeat(60),
   categories: ['sales'],
+  linkedinUrl: 'https://linkedin.com/in/example',
 } as SpecialistProfileDto;
 
 describe('ProfilesService', () => {
@@ -69,6 +74,14 @@ describe('ProfilesService', () => {
     await expect(service.saveStartup(SPECIALIST, STARTUP_DTO)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('asks for a LinkedIn or a portfolio', async () => {
+    const { linkedinUrl, ...withoutLinks } = SPECIALIST_DTO;
+    await expect(
+      service.saveSpecialist(SPECIALIST, withoutLinks as SpecialistProfileDto),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.specialistProfile.upsert).not.toHaveBeenCalled();
   });
 
   it('does not let a startup save a specialist profile', async () => {
