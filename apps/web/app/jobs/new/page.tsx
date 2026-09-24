@@ -1,8 +1,10 @@
 'use client';
 
-import { ServiceCategory, type Job } from '@pocket/shared';
+import { ServiceCategory, type Job, type JobMilestoneInput } from '@pocket/shared';
 import { useMutation } from '@tanstack/react-query';
+import { PlusIcon, Trash2Icon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Field, formValues } from '@/components/form';
 import { PageHeader } from '@/components/page';
@@ -12,7 +14,27 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiError, api, errorMessage } from '@/lib/api';
-import { CATEGORY_LABELS, todayIso } from '@/lib/format';
+import { CATEGORY_LABELS, todayIso, usdc } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import { fromUnits, toUnits } from '@/lib/usdc';
+
+const MAX_MILESTONES = 5;
+
+interface MilestoneDraft {
+  title: string;
+  description: string;
+  acceptanceCriteria: string;
+  amount: string;
+  dueDate: string;
+}
+
+const EMPTY: MilestoneDraft = {
+  title: '',
+  description: '',
+  acceptanceCriteria: '',
+  amount: '',
+  dueDate: '',
+};
 
 export default function NewJobPage() {
   return (
@@ -22,8 +44,19 @@ export default function NewJobPage() {
   );
 }
 
+/**
+ * Posting a job also means posting how it gets paid. Each milestone says what
+ * has to be delivered and what it has to meet to be approved, so a specialist
+ * knows exactly what unlocks each payment before applying.
+ */
 function NewJob() {
   const router = useRouter();
+  const [budget, setBudget] = useState('');
+  const [milestones, setMilestones] = useState<MilestoneDraft[]>([{ ...EMPTY }]);
+
+  const assigned = milestones.reduce((sum, m) => sum + toUnits(m.amount), BigInt(0));
+  const remaining = toUnits(budget) - assigned;
+
   const create = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api<Job>('/jobs', { method: 'POST', body }),
@@ -42,17 +75,47 @@ function NewJob() {
     },
   });
 
+  function update(index: number, patch: Partial<MilestoneDraft>) {
+    setMilestones((current) =>
+      current.map((milestone, i) =>
+        i === index ? { ...milestone, ...patch } : milestone,
+      ),
+    );
+  }
+
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (remaining !== BigInt(0)) {
+      toast.error(`The milestones must add up to the ${usdc(budget)} budget`);
+      return;
+    }
     const values = formValues(event.currentTarget);
-    create.mutate({ ...values, budget: Number(values.budget) });
+    create.mutate({
+      title: values.title,
+      description: values.description,
+      category: values.category,
+      deliverables: values.deliverables,
+      budget: Number(budget),
+      deadline: values.deadline,
+      revisionRounds: Number(values.revisionRounds ?? 1),
+      ...(values.channel ? { channel: values.channel } : {}),
+      ...(values.contentLanguage ? { contentLanguage: values.contentLanguage } : {}),
+      ...(values.startupProvides ? { startupProvides: values.startupProvides } : {}),
+      milestones: milestones.map((milestone): JobMilestoneInput => ({
+        title: milestone.title.trim(),
+        description: milestone.description.trim(),
+        acceptanceCriteria: milestone.acceptanceCriteria.trim(),
+        amount: Number(milestone.amount),
+        dueDate: milestone.dueDate,
+      })),
+    });
   }
 
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title="Post a job"
-        description="Specialists apply with a proposal, a price and a time estimate. You pick one and split the work into milestones."
+        description="Say what you need, how it gets paid and what each delivery has to meet. Specialists apply with a proposal and a price."
       />
       <Card>
         <CardContent className="pt-6">
@@ -86,7 +149,7 @@ function NewJob() {
             <Field
               label="Description"
               htmlFor="description"
-              hint="The scope of the work, 50 to 5000 characters."
+              hint="Goal, audience, specs and references. 50 to 5000 characters."
               required
             >
               <Textarea
@@ -96,6 +159,9 @@ function NewJob() {
                 minLength={50}
                 maxLength={5000}
                 rows={6}
+                placeholder={
+                  'Goal: what this work has to achieve.\nAudience: who it speaks to.\nSpecs: length, format, subtitles, style.\nReferences: links you like.\nDoes the specialist only deliver, or also publish?'
+                }
               />
             </Field>
             <Field
@@ -113,6 +179,7 @@ function NewJob() {
                 rows={3}
               />
             </Field>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Budget (USDC)" htmlFor="budget" required>
                 <Input
@@ -123,6 +190,8 @@ function NewJob() {
                   min={1}
                   max={1000000}
                   step="any"
+                  value={budget}
+                  onChange={(event) => setBudget(event.target.value)}
                 />
               </Field>
               <Field label="Deadline" htmlFor="deadline" required>
@@ -135,6 +204,176 @@ function NewJob() {
                 />
               </Field>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field
+                label="Rounds of changes"
+                htmlFor="revisionRounds"
+                hint="Included in the price."
+              >
+                <Input
+                  id="revisionRounds"
+                  name="revisionRounds"
+                  type="number"
+                  min={0}
+                  max={10}
+                  defaultValue={1}
+                />
+              </Field>
+              <Field
+                label="Channel"
+                htmlFor="channel"
+                hint="Where it is published or used."
+              >
+                <Input
+                  id="channel"
+                  name="channel"
+                  maxLength={120}
+                  placeholder="TikTok and Reels"
+                />
+              </Field>
+              <Field label="Content language" htmlFor="contentLanguage">
+                <Input
+                  id="contentLanguage"
+                  name="contentLanguage"
+                  maxLength={60}
+                  placeholder="Spanish"
+                />
+              </Field>
+            </div>
+
+            <Field
+              label="What you provide"
+              htmlFor="startupProvides"
+              hint="Script, brand, logo, access to the app, anything the specialist can count on."
+            >
+              <Textarea
+                id="startupProvides"
+                name="startupProvides"
+                maxLength={2000}
+                rows={2}
+              />
+            </Field>
+
+            <section className="space-y-3 rounded-2xl border border-border p-4">
+              <div>
+                <h2 className="font-heading text-lg font-semibold text-navy">
+                  Payment plan
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Split the budget into up to {MAX_MILESTONES} deliveries. Each one is
+                  paid when you approve it, so the specialist knows what unlocks each
+                  payment.
+                </p>
+              </div>
+
+              {milestones.map((milestone, index) => (
+                <div key={index} className="space-y-3 rounded-xl bg-muted/40 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-navy">
+                      Milestone {index + 1}
+                    </p>
+                    {milestones.length > 1 ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Remove milestone"
+                        onClick={() =>
+                          setMilestones((current) =>
+                            current.filter((_, i) => i !== index),
+                          )
+                        }
+                      >
+                        <Trash2Icon />
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Input
+                    placeholder="Title, e.g. Video 1"
+                    required
+                    minLength={3}
+                    maxLength={120}
+                    value={milestone.title}
+                    onChange={(event) => update(index, { title: event.target.value })}
+                  />
+                  <Textarea
+                    placeholder="What has to be delivered"
+                    required
+                    minLength={10}
+                    maxLength={2000}
+                    rows={2}
+                    value={milestone.description}
+                    onChange={(event) =>
+                      update(index, { description: event.target.value })
+                    }
+                  />
+                  <Textarea
+                    placeholder="What it has to meet to be approved, e.g. vertical, 60 seconds, subtitles and the logo"
+                    required
+                    minLength={10}
+                    maxLength={2000}
+                    rows={2}
+                    value={milestone.acceptanceCriteria}
+                    onChange={(event) =>
+                      update(index, { acceptanceCriteria: event.target.value })
+                    }
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      type="number"
+                      placeholder="Amount (USDC)"
+                      required
+                      min={0.0000001}
+                      step="any"
+                      value={milestone.amount}
+                      onChange={(event) => update(index, { amount: event.target.value })}
+                    />
+                    <Input
+                      type="date"
+                      required
+                      min={todayIso()}
+                      value={milestone.dueDate}
+                      onChange={(event) => update(index, { dueDate: event.target.value })}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {milestones.length < MAX_MILESTONES ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setMilestones((current) => [
+                      ...current,
+                      {
+                        ...EMPTY,
+                        amount: remaining > BigInt(0) ? fromUnits(remaining) : '',
+                      },
+                    ])
+                  }
+                >
+                  <PlusIcon /> Add milestone
+                </Button>
+              ) : null}
+
+              {budget ? (
+                <p
+                  className={cn(
+                    'text-sm',
+                    remaining === BigInt(0) ? 'text-emerald-700' : 'text-destructive',
+                  )}
+                >
+                  {remaining === BigInt(0)
+                    ? 'The milestones add up to the budget.'
+                    : remaining > BigInt(0)
+                      ? `${usdc(fromUnits(remaining))} of the budget still to assign.`
+                      : `${usdc(fromUnits(-remaining))} over the budget.`}
+                </p>
+              ) : null}
+            </section>
+
             <Button type="submit" size="lg" disabled={create.isPending}>
               {create.isPending ? 'Posting...' : 'Post job'}
             </Button>
