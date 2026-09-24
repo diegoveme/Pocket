@@ -114,8 +114,19 @@ export interface StartupProfile {
   lookingFor: string;
   websiteUrl?: string | null;
   logoUrl?: string | null;
+  /** Registered name, when it differs from the trading name. */
+  legalName?: string | null;
+  /** Role of the person who signs the contracts. */
+  contactRole?: string | null;
+  languages: string[];
   location?: string | null;
   updatedAt: IsoDate;
+}
+
+export interface CaseStudy {
+  url: string;
+  /** The outcome in one line. */
+  result: string;
 }
 
 export interface SpecialistProfile {
@@ -126,7 +137,14 @@ export interface SpecialistProfile {
   bio: string;
   categories: ServiceCategory[];
   skills: string[];
-  caseStudies: string[];
+  /** Past work with its outcome, e.g. { url, result: '+40% followers in 2 months' }. */
+  caseStudies: CaseStudy[];
+  tools: string[];
+  yearsExperience?: number | null;
+  languages: string[];
+  timezone?: string | null;
+  /** Hours a week the specialist can take on. */
+  weeklyHours?: number | null;
   /** Rates are in USDC. Serialized as strings to keep decimal precision. */
   hourlyRate?: string | null;
   minProjectBudget?: string | null;
@@ -168,6 +186,34 @@ export interface JobInput {
   budget: number;
   /** Calendar date, YYYY-MM-DD. */
   deadline: string;
+  /** Rounds of changes the price includes. */
+  revisionRounds?: number;
+  /** Where the work is published or used, e.g. TikTok, LinkedIn. */
+  channel?: string;
+  /** Language of the content itself. */
+  contentLanguage?: string;
+  /** What the startup hands over: script, brand, logo, access. */
+  startupProvides?: string;
+  /** The payment plan. Each milestone says what it has to meet to be approved. */
+  milestones: JobMilestoneInput[];
+}
+
+/** A milestone as the startup posts it with the job. */
+export interface JobMilestoneInput {
+  title: string;
+  description: string;
+  acceptanceCriteria: string;
+  amount: number;
+  /** Calendar date, YYYY-MM-DD. */
+  dueDate: string;
+}
+
+export interface JobMilestone extends Omit<JobMilestoneInput, 'amount' | 'dueDate'> {
+  id: string;
+  position: number;
+  /** USDC, serialized as a string to keep decimal precision. */
+  amount: string;
+  dueDate: IsoDate;
 }
 
 export interface Job {
@@ -180,6 +226,11 @@ export interface Job {
   /** USDC, serialized as a string to keep decimal precision. */
   budget: string;
   deadline: IsoDate;
+  revisionRounds: number;
+  channel?: string | null;
+  contentLanguage?: string | null;
+  startupProvides?: string | null;
+  milestones: JobMilestone[];
   status: JobStatus;
   createdAt: IsoDate;
   updatedAt: IsoDate;
@@ -201,8 +252,14 @@ export interface JobBoard {
 
 /** POST /jobs/:id/applications. Price is in USDC and may differ from the budget. */
 export interface ApplicationInput {
-  proposal: string;
+  /** How the specialist would do it. */
+  approach: string;
+  /** A piece of past work close to this job. */
+  similarWorkUrl?: string;
+  /** What they need from the startup to start. */
+  needsFromStartup?: string;
   price: number;
+  /** Days from the moment the escrow is funded. */
   estimatedDays: number;
 }
 
@@ -210,7 +267,9 @@ export interface Application {
   id: string;
   jobId: string;
   specialistId: string;
-  proposal: string;
+  approach: string;
+  similarWorkUrl?: string | null;
+  needsFromStartup?: string | null;
   /** USDC, serialized as a string to keep decimal precision. */
   price: string;
   estimatedDays: number;
