@@ -89,6 +89,48 @@ export default function JobPage() {
                 {data.deliverables}
               </p>
             </section>
+            {data.channel || data.contentLanguage || data.startupProvides ? (
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {data.channel ? <Detail label="Channel">{data.channel}</Detail> : null}
+                {data.contentLanguage ? (
+                  <Detail label="Content language">{data.contentLanguage}</Detail>
+                ) : null}
+                <Detail label="Rounds of changes">{data.revisionRounds}</Detail>
+                {data.startupProvides ? (
+                  <div className="col-span-2 sm:col-span-3">
+                    <Detail label="The startup provides">{data.startupProvides}</Detail>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
+            {data.milestones.length > 0 ? (
+              <section>
+                <h2 className="text-lg font-semibold text-navy">Payment plan</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Each one is paid when the startup approves it.
+                </p>
+                <ol className="mt-3 space-y-3">
+                  {data.milestones.map((milestone) => (
+                    <li
+                      key={milestone.id}
+                      className="rounded-xl border border-border p-3 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold text-navy">{milestone.title}</p>
+                        <p className="text-muted-foreground">
+                          {usdc(milestone.amount)} · due {date(milestone.dueDate)}
+                        </p>
+                      </div>
+                      <p className="mt-1 whitespace-pre-line">{milestone.description}</p>
+                      <p className="mt-2 whitespace-pre-line text-muted-foreground">
+                        <span className="font-medium text-navy">To be approved: </span>
+                        {milestone.acceptanceCriteria}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -143,7 +185,9 @@ function ApplyCard({ job, user }: { job: JobListing; user: User }) {
     event.preventDefault();
     const values = formValues(event.currentTarget);
     apply.mutate({
-      proposal: values.proposal,
+      approach: values.approach,
+      ...(values.similarWorkUrl ? { similarWorkUrl: values.similarWorkUrl } : {}),
+      ...(values.needsFromStartup ? { needsFromStartup: values.needsFromStartup } : {}),
       price: Number(values.price),
       estimatedDays: Number(values.estimatedDays),
     });
@@ -207,18 +251,42 @@ function ApplyCard({ job, user }: { job: JobListing; user: User }) {
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
           <Field
-            label="Proposal"
-            htmlFor="proposal"
-            hint="Why you, and how you would do it."
+            label="How would you do it?"
+            htmlFor="approach"
+            hint="The steps you would follow for this job, not your life story."
             required
           >
             <Textarea
-              id="proposal"
-              name="proposal"
+              id="approach"
+              name="approach"
               required
               minLength={50}
               maxLength={5000}
-              rows={6}
+              rows={5}
+            />
+          </Field>
+          <Field
+            label="A similar piece of work"
+            htmlFor="similarWorkUrl"
+            hint="A link to something close to this job."
+          >
+            <Input
+              id="similarWorkUrl"
+              name="similarWorkUrl"
+              type="url"
+              placeholder="https://"
+            />
+          </Field>
+          <Field
+            label="What do you need from them?"
+            htmlFor="needsFromStartup"
+            hint="Brand, access, a script, anything you need to start."
+          >
+            <Textarea
+              id="needsFromStartup"
+              name="needsFromStartup"
+              maxLength={2000}
+              rows={2}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
