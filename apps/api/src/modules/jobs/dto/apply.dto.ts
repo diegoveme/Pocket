@@ -1,13 +1,36 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNumber, IsString, Length, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Length,
+  Max,
+  Min,
+} from 'class-validator';
 
 /** A specialist's offer on a job. The price may differ from the posted budget. */
 export class ApplyDto {
-  @ApiProperty({ description: 'Why they are the right person and how they would do it' })
+  @ApiProperty({ description: 'How they would do it, step by step' })
   @IsString()
   @Length(50, 5000)
-  proposal: string;
+  approach: string;
+
+  @ApiPropertyOptional({ description: 'A piece of past work close to this job' })
+  @IsOptional()
+  @IsUrl()
+  similarWorkUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'What they need from the startup to start',
+    example: 'Brand guide and access to the ad account',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(5, 2000)
+  needsFromStartup?: string;
 
   @ApiProperty({ description: 'Price in USDC', example: 450 })
   @Type(() => Number)
@@ -16,7 +39,10 @@ export class ApplyDto {
   @Max(1_000_000)
   price: number;
 
-  @ApiProperty({ description: 'How many days the work would take', example: 14 })
+  @ApiProperty({
+    description: 'Days of work, counted from the moment the escrow is funded',
+    example: 14,
+  })
   @Type(() => Number)
   @IsInt()
   @Min(1)

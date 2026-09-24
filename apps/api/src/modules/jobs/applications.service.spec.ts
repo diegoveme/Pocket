@@ -22,7 +22,7 @@ const specialist: AuthUser = {
   stellarAddress: 'GSPECIALIST',
 };
 
-const dto: ApplyDto = { proposal: 'p'.repeat(60), price: 450, estimatedDays: 14 };
+const dto: ApplyDto = { approach: 'p'.repeat(60), price: 450, estimatedDays: 14 };
 
 describe('ApplicationsService', () => {
   let prisma: {
