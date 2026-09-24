@@ -154,7 +154,11 @@ function Verification({ user }: { user: User }) {
                       defaultValue={previous?.companyName}
                     />
                   </Field>
-                  <Field label="Registration or tax id" htmlFor="companyRegistrationId">
+                  <Field
+                    label="Registration or tax id"
+                    htmlFor="companyRegistrationId"
+                    hint="Optional. Pocket does not check it against any registry, so it is only a hint for the manager, never a badge of trust."
+                  >
                     <Input
                       id="companyRegistrationId"
                       name="companyRegistrationId"
