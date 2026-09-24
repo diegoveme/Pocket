@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -6,6 +6,7 @@ import {
   IsArray,
   IsDateString,
   IsNumber,
+  IsOptional,
   IsString,
   IsUUID,
   Length,
@@ -25,6 +26,15 @@ export class MilestoneInputDto {
   @IsString()
   @Length(10, 2000)
   description: string;
+
+  @ApiPropertyOptional({
+    description: 'What it has to meet to be approved. Carried over from the job.',
+    example: 'Vertical video, around 60 seconds, with subtitles and the logo',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(10, 2000)
+  acceptanceCriteria?: string;
 
   @ApiProperty({ description: 'Amount in USDC', example: 200 })
   @Type(() => Number)

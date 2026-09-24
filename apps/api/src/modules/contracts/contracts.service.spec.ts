@@ -57,6 +57,7 @@ describe('ContractsService', () => {
       update: jest.Mock;
       updateMany: jest.Mock;
     };
+    verificationRequest: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let escrow: { deploy: jest.Mock; isFunded: jest.Mock; prepareFund: jest.Mock };
@@ -93,6 +94,13 @@ describe('ContractsService', () => {
           ...data,
         })),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      verificationRequest: {
+        // Two different people: each account verified with its own email.
+        findMany: jest.fn().mockResolvedValue([
+          { userId: 'startup-1', contactEmail: 'startup@example.com' },
+          { userId: 'specialist-1', contactEmail: 'specialist@example.com' },
+        ]),
       },
       $transaction: jest.fn(async (ops: unknown[]) => Promise.all(ops)),
     };
@@ -150,6 +158,17 @@ describe('ContractsService', () => {
           milestones: [{ ...dto.milestones[0], amount: 450.4 }],
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.contract.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a hire between two accounts verified with the same email', async () => {
+      prisma.verificationRequest.findMany.mockResolvedValue([
+        { userId: 'startup-1', contactEmail: 'same@example.com' },
+        { userId: 'specialist-1', contactEmail: 'SAME@example.com' },
+      ]);
+      await expect(service.create(startup, dto)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       expect(prisma.contract.create).not.toHaveBeenCalled();
     });
 

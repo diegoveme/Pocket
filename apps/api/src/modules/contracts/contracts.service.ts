@@ -83,6 +83,8 @@ export class ContractsService {
       throw new BadRequestException('This application is no longer available');
     }
 
+    await this.assertDifferentPeople(user.sub, application.specialistId);
+
     const today = new Date().toISOString().slice(0, 10);
     if (dto.milestones.some((milestone) => milestone.dueDate < today)) {
       throw new BadRequestException('A milestone cannot be due in the past');
@@ -342,6 +344,28 @@ export class ContractsService {
       code: ApiErrorCode.InsufficientUsdc,
       message: `Your wallet holds ${have.toString()} USDC and the escrow needs ${amount.toString()} USDC. Add ${amount.minus(have).toString()} USDC and try again`,
     });
+  }
+
+  /**
+   * An escrow between two accounts of the same person protects nobody, and a
+   * dispute would have a manager arbitrating someone against themselves. The
+   * contact email of the approved verification is what ties the two accounts.
+   */
+  private async assertDifferentPeople(
+    startupId: string,
+    specialistId: string,
+  ): Promise<void> {
+    if (startupId === specialistId) {
+      throw new BadRequestException('You cannot hire yourself');
+    }
+    const emails = await this.contactEmails([startupId, specialistId]);
+    const startupEmail = emails.get(startupId)?.toLowerCase();
+    const specialistEmail = emails.get(specialistId)?.toLowerCase();
+    if (startupEmail && startupEmail === specialistEmail) {
+      throw new BadRequestException(
+        'Both accounts were verified with the same contact email, so they cannot hire each other',
+      );
+    }
   }
 
   /** Contact email from each user's approved verification. */
