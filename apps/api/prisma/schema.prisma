@@ -134,6 +134,11 @@ model StartupProfile {
   lookingFor  String       @map("looking_for")
   websiteUrl  String?      @map("website_url")
   logoUrl     String?      @map("logo_url")
+  // Registered name, when it differs from the trading name.
+  legalName   String?      @map("legal_name")
+  // Role of the person who signs the contracts.
+  contactRole String?      @map("contact_role")
+  languages   String[]     @default([])
   location    String?
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
@@ -153,8 +158,17 @@ model SpecialistProfile {
   bio              String
   categories       ServiceCategory[]
   skills           String[]          @default([])
-  // Past work the startup can check.
-  caseStudies      String[]          @default([]) @map("case_studies")
+  // Past work the startup can check: [{ url, result }], where result is
+  // the outcome in one line, e.g. "+40% followers in 2 months".
+  caseStudies      Json              @default("[]") @map("case_studies")
+  // Tools they work with, e.g. Meta Ads, GA4, HubSpot.
+  tools            String[]          @default([])
+  yearsExperience  Int?              @map("years_experience")
+  // Languages they work in, and where they are, for startups in other countries.
+  languages        String[]          @default([])
+  timezone         String?
+  // Hours a week they can take on.
+  weeklyHours      Int?              @map("weekly_hours")
   hourlyRate       Decimal?          @map("hourly_rate") @db.Decimal(20, 7)
   minProjectBudget Decimal?          @map("min_project_budget") @db.Decimal(20, 7)
   portfolioUrl     String?           @map("portfolio_url")
@@ -190,41 +204,76 @@ enum ApplicationStatus {
 
 // A piece of work a startup posts for specialists to apply to. Budget is in USDC.
 model Job {
-  id           String          @id @default(uuid()) @db.Uuid
-  startupId    String          @map("startup_id") @db.Uuid
-  title        String
-  description  String
-  category     ServiceCategory
+  id              String          @id @default(uuid()) @db.Uuid
+  startupId       String          @map("startup_id") @db.Uuid
+  title           String
+  description     String
+  category        ServiceCategory
   // What the startup expects to receive at the end.
-  deliverables String
-  budget       Decimal         @db.Decimal(20, 7)
-  deadline     DateTime        @db.Date
-  status       JobStatus       @default(open)
-  createdAt    DateTime        @default(now()) @map("created_at")
-  updatedAt    DateTime        @updatedAt @map("updated_at")
+  deliverables    String
+  budget          Decimal         @db.Decimal(20, 7)
+  deadline        DateTime        @db.Date
+  // How many rounds of changes the price includes.
+  revisionRounds  Int             @default(1) @map("revision_rounds")
+  // Where the work is published or used, e.g. TikTok, LinkedIn, a landing page.
+  channel         String?
+  // Language of the content itself, not of the conversation.
+  contentLanguage String?         @map("content_language")
+  // What the startup hands over: script, brand, logo, access to the app.
+  startupProvides String?         @map("startup_provides")
+  status          JobStatus       @default(open)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
 
-  startup      User          @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  startup      User           @relation(fields: [startupId], references: [id], onDelete: Cascade)
   applications Application[]
   contracts    Contract[]
+  milestones   JobMilestone[]
 
   @@index([status, category])
   @@index([startupId])
   @@map("jobs")
 }
 
+// The payment plan the startup posts with the job: what has to be delivered,
+// what it has to meet to be approved, how much it pays and when. It is copied
+// into the contract when hiring, adjusted only if the two sides negotiated.
+model JobMilestone {
+  id                 String   @id @default(uuid()) @db.Uuid
+  jobId              String   @map("job_id") @db.Uuid
+  position           Int
+  title              String
+  description        String
+  // What it has to meet for the startup to approve it.
+  acceptanceCriteria String   @map("acceptance_criteria")
+  amount             Decimal  @db.Decimal(20, 7)
+  dueDate            DateTime @map("due_date") @db.Date
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, position])
+  @@map("job_milestones")
+}
+
 // A specialist's offer on a job. One per specialist and job; the price may
 // differ from the posted budget.
 model Application {
-  id            String            @id @default(uuid()) @db.Uuid
-  jobId         String            @map("job_id") @db.Uuid
-  specialistId  String            @map("specialist_id") @db.Uuid
-  proposal      String
-  price         Decimal           @db.Decimal(20, 7)
-  estimatedDays Int               @map("estimated_days")
-  status        ApplicationStatus @default(submitted)
-  decidedAt     DateTime?         @map("decided_at")
-  createdAt     DateTime          @default(now()) @map("created_at")
-  updatedAt     DateTime          @updatedAt @map("updated_at")
+  id               String            @id @default(uuid()) @db.Uuid
+  jobId            String            @map("job_id") @db.Uuid
+  specialistId     String            @map("specialist_id") @db.Uuid
+  // How they would do it.
+  approach         String
+  // A piece of past work close to this job.
+  similarWorkUrl   String?           @map("similar_work_url")
+  // What they need from the startup to start.
+  needsFromStartup String?           @map("needs_from_startup")
+  price            Decimal           @db.Decimal(20, 7)
+  // Days from the moment the escrow is funded.
+  estimatedDays    Int               @map("estimated_days")
+  status           ApplicationStatus @default(submitted)
+  decidedAt        DateTime?         @map("decided_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
 
   job        Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
   specialist User      @relation(fields: [specialistId], references: [id], onDelete: Cascade)
@@ -291,20 +340,24 @@ model Contract {
 }
 
 model Milestone {
-  id          String          @id @default(uuid()) @db.Uuid
-  contractId  String          @map("contract_id") @db.Uuid
+  id                 String          @id @default(uuid()) @db.Uuid
+  contractId         String          @map("contract_id") @db.Uuid
   // Zero-based index of this milestone inside the escrow.
-  position    Int
-  title       String
-  description String
+  position           Int
+  title              String
+  description        String
+  // What it has to meet to be approved, carried over from the job.
+  acceptanceCriteria String?         @map("acceptance_criteria")
   // USDC.
-  amount      Decimal         @db.Decimal(20, 7)
-  dueDate     DateTime        @map("due_date") @db.Date
-  status      MilestoneStatus @default(pending)
-  approvedAt  DateTime?       @map("approved_at")
-  paidAt      DateTime?       @map("paid_at")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
+  amount             Decimal         @db.Decimal(20, 7)
+  dueDate            DateTime        @map("due_date") @db.Date
+  status             MilestoneStatus @default(pending)
+  // Rounds of changes already asked for on this milestone.
+  revisionsUsed      Int             @default(0) @map("revisions_used")
+  approvedAt         DateTime?       @map("approved_at")
+  paidAt             DateTime?       @map("paid_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
 
   contract        Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
   deliverables    Deliverable[]
